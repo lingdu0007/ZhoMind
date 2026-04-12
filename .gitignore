@@ -30,3 +30,11 @@ qdrant/
 *.sqlite
 tmp/
 temp/
+
+docs/
+
+.codex
+# AI 工具规则文件
+CLAUDE.md
+RULE.md
+AGENT.md
