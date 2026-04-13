@@ -43,12 +43,21 @@ const submit = async () => {
   }
   loading.value = true;
   try {
+    const selectedFile = file.value;
     const formData = new FormData();
-    formData.append('file', file.value);
-    await apiAdapter.uploadDocument(formData);
-    ElMessage.success('上传成功，已提交解析');
+    formData.append('file', selectedFile);
+    const result = await apiAdapter.uploadDocument(formData);
+
+    const jobId = result?.job_id || '';
+    const documentId = result?.document_id || '';
+
+    ElMessage.success(`已入队，正在构建索引${jobId ? `（任务ID: ${jobId}）` : ''}`);
     file.value = null;
-    emit('uploaded');
+    emit('uploaded', {
+      job_id: jobId,
+      document_id: documentId,
+      filename: selectedFile?.name || ''
+    });
   } catch (error) {
     ElMessage.error(error.message || '上传失败');
   } finally {

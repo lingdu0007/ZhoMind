@@ -34,8 +34,8 @@ export const apiAdapter = {
   },
 
   // Documents (admin)
-  async listDocuments() {
-    const { data } = await http.get('/documents');
+  async listDocuments(params) {
+    const { data } = await http.get('/documents', { params });
     return data;
   },
   async uploadDocument(formData) {
@@ -46,6 +46,20 @@ export const apiAdapter = {
   },
   async deleteDocument(filename) {
     const { data } = await http.delete(`/documents/${encodeURIComponent(filename)}`);
+    return data;
+  },
+
+  // Document async jobs (admin)
+  async listDocumentJobs(params) {
+    const { data } = await http.get('/documents/jobs', { params });
+    return data;
+  },
+  async getDocumentJob(jobId) {
+    const { data } = await http.get(`/documents/jobs/${encodeURIComponent(jobId)}`);
+    return data;
+  },
+  async cancelDocumentJob(jobId) {
+    const { data } = await http.post(`/documents/jobs/${encodeURIComponent(jobId)}/cancel`);
     return data;
   }
 };
