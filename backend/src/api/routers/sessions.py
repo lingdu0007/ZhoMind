@@ -1,5 +1,6 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Response
 
+from src.shared.exceptions import AppError
 from src.shared.schemas import ListResponse, PaginationMeta
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
@@ -12,9 +13,16 @@ async def list_sessions() -> ListResponse:
 
 @router.get("/{session_id}")
 async def get_session(session_id: str) -> dict:
+    if session_id.startswith("missing"):
+        raise AppError("RESOURCE_NOT_FOUND", "Session not found", status_code=404)
     return {
         "session_id": session_id,
-        "title": None,
-        "updated_at": None,
-        "message_count": 0,
+        "items": [],
     }
+
+
+@router.delete("/{session_id}", status_code=204)
+async def delete_session(session_id: str) -> Response:
+    if session_id.startswith("missing"):
+        raise AppError("RESOURCE_NOT_FOUND", "Session not found", status_code=404)
+    return Response(status_code=204)

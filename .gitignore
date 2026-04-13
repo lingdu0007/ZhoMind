@@ -86,3 +86,4 @@ temp/
 CLAUDE.md
 RULE.md
 AGENT.md
+frontend/.playwright-browsers/

@@ -19,11 +19,15 @@ def test_api_prefix_not_404() -> None:
     assert "pagination" in payload
 
 
-def test_not_implemented_error_contract_has_request_id() -> None:
-    response = client.post("/api/v1/auth/login")
-    assert response.status_code == 501
-    payload = response.json()
-    assert payload["code"] == "NOT_IMPLEMENTED"
-    assert payload["message"]
-    assert "request_id" in payload
-    assert response.headers.get("x-request-id")
+def test_auth_login_contract_200_and_401() -> None:
+    ok = client.post("/api/v1/auth/login", json={"username": "admin", "password": "admin-token"})
+    assert ok.status_code == 200
+    ok_payload = ok.json()
+    assert ok_payload["token_type"] == "Bearer"
+    assert ok_payload["role"] == "admin"
+
+    bad = client.post("/api/v1/auth/login", json={"username": "admin", "password": "bad"})
+    assert bad.status_code == 401
+    bad_payload = bad.json()
+    assert bad_payload["code"] == "AUTH_BAD_CREDENTIALS"
+    assert "request_id" in bad_payload

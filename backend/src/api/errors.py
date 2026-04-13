@@ -1,6 +1,7 @@
 import logging
 
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from src.shared.exceptions import AppError
@@ -25,6 +26,17 @@ def register_exception_handlers(app: FastAPI) -> None:
             request_id=rid,
         )
         return JSONResponse(status_code=exc.status_code, content=payload.model_dump())
+
+    @app.exception_handler(RequestValidationError)
+    async def handle_request_validation_error(request: Request, exc: RequestValidationError) -> JSONResponse:
+        rid = _request_id(request)
+        payload = ErrorResponse(
+            code="VALIDATION_ERROR",
+            message="Request validation failed",
+            detail={"errors": exc.errors()},
+            request_id=rid,
+        )
+        return JSONResponse(status_code=422, content=payload.model_dump())
 
     @app.exception_handler(Exception)
     async def handle_unexpected_error(request: Request, exc: Exception) -> JSONResponse:

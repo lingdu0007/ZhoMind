@@ -19,13 +19,20 @@ http.interceptors.request.use((config) => {
 http.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error?.response?.status === 401) {
+    const status = error?.response?.status;
+    const payload = error?.response?.data || {};
+    if (status === 401) {
       localStorage.removeItem('access_token');
       localStorage.removeItem('username');
       localStorage.removeItem('role');
     }
-    const message = error?.response?.data?.detail || error.message || '请求失败';
-    return Promise.reject(new Error(message));
+
+    const normalizedError = new Error(payload.message || payload.detail || error.message || '请求失败');
+    normalizedError.status = status || 0;
+    normalizedError.code = payload.code || '';
+    normalizedError.detail = payload.detail;
+    normalizedError.request_id = payload.request_id || '';
+    return Promise.reject(normalizedError);
   }
 );
 

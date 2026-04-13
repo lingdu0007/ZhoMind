@@ -4,17 +4,12 @@ from fastapi import FastAPI
 
 from src.api.errors import register_exception_handlers
 from src.api.router import api_router
+from src.application.document_service import DocumentService, DocumentTaskExecutor
 from src.infrastructure.config.settings import get_settings
 from src.infrastructure.db.connection import create_database
 from src.infrastructure.logging.logger import setup_logging
-from src.infrastructure.queue.runner import QueueRunner, TaskExecutor
+from src.infrastructure.queue.runner import QueueRunner
 from src.shared.middleware import RequestIdMiddleware
-
-
-class NoopTaskExecutor(TaskExecutor):
-    async def execute(self, task_name: str, payload: dict) -> None:
-        _ = task_name, payload
-        return None
 
 
 @asynccontextmanager
@@ -26,11 +21,14 @@ async def lifespan(app: FastAPI):
     db = create_database(settings.database_url)
     await db.connect()
 
-    queue_runner = QueueRunner(settings.queue_backend, NoopTaskExecutor())
+    queue_runner = QueueRunner(settings.queue_backend, executor=DocumentTaskExecutor(service=None))
+    document_service = DocumentService(queue_runner=queue_runner)
+    queue_runner.executor = DocumentTaskExecutor(service=document_service)
     await queue_runner.start()
 
     app.state.db = db
     app.state.queue_runner = queue_runner
+    app.state.document_service = document_service
 
     yield
 

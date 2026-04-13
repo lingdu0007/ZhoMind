@@ -1,9 +1,12 @@
 <template>
   <div class="upload-card card">
     <el-upload
+      ref="uploadRef"
       drag
       :auto-upload="false"
       :on-change="handleFileChange"
+      :on-remove="handleFileRemove"
+      :limit="1"
       :show-file-list="true"
       accept=".txt,.md,.pdf,.doc,.docx,.xls,.xlsx"
       class="upload-drop"
@@ -29,11 +32,16 @@ import { apiAdapter } from '../api/adapters';
 
 const emit = defineEmits(['uploaded']);
 
+const uploadRef = ref(null);
 const file = ref(null);
 const loading = ref(false);
 
 const handleFileChange = (rawFile) => {
   file.value = rawFile.raw;
+};
+
+const handleFileRemove = () => {
+  file.value = null;
 };
 
 const submit = async () => {
@@ -53,13 +61,15 @@ const submit = async () => {
 
     ElMessage.success(`已入队，正在构建索引${jobId ? `（任务ID: ${jobId}）` : ''}`);
     file.value = null;
+    uploadRef.value?.clearFiles();
     emit('uploaded', {
       job_id: jobId,
       document_id: documentId,
       filename: selectedFile?.name || ''
     });
   } catch (error) {
-    ElMessage.error(error.message || '上传失败');
+    const message = error?.message || '上传失败';
+    ElMessage.error(error?.code ? `${message} (${error.code})` : message);
   } finally {
     loading.value = false;
   }

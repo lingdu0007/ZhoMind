@@ -1,0 +1,574 @@
+{
+  "route_method_drift": {
+    "missing_in_impl": [],
+    "extra_in_impl": [
+      [
+        "GET",
+        "/api/v1/docs"
+      ],
+      [
+        "GET",
+        "/api/v1/openapi.json"
+      ],
+      [
+        "GET",
+        "/api/v1/redoc"
+      ],
+      [
+        "GET",
+        "/docs/oauth2-redirect"
+      ],
+      [
+        "GET",
+        "/health"
+      ],
+      [
+        "GET",
+        "/ready"
+      ]
+    ]
+  },
+  "checks": [
+    {
+      "name": "auth_register_201_tokens",
+      "expected": "201 + AuthTokens",
+      "actual_status": 201,
+      "request_id": "req_df97d22cbc03",
+      "actual_body": {
+        "access_token": "user-token",
+        "token_type": "Bearer",
+        "expires_in": 3600,
+        "refresh_token": null,
+        "username": "qa_user_2026",
+        "role": "user"
+      },
+      "pass": true
+    },
+    {
+      "name": "auth_login_success",
+      "expected": "200 + AuthTokens",
+      "actual_status": 200,
+      "request_id": "req_d6bafea1b6c2",
+      "actual_body": {
+        "access_token": "admin-token",
+        "token_type": "Bearer",
+        "expires_in": 3600,
+        "refresh_token": null,
+        "username": "admin",
+        "role": "admin"
+      },
+      "pass": true
+    },
+    {
+      "name": "auth_login_bad_credentials",
+      "expected": "401 + AUTH_BAD_CREDENTIALS",
+      "actual_status": 401,
+      "request_id": "req_330588f9b87a",
+      "actual_body": {
+        "code": "AUTH_BAD_CREDENTIALS",
+        "message": "Invalid username or password",
+        "detail": null,
+        "request_id": "req_330588f9b87a"
+      },
+      "pass": true
+    },
+    {
+      "name": "auth_me",
+      "expected": "200 + {username, role}",
+      "actual_status": 200,
+      "request_id": "req_26a0aa6c4f6a",
+      "actual_body": {
+        "username": "admin",
+        "role": "admin"
+      },
+      "pass": true
+    },
+    {
+      "name": "sessions_list_shape",
+      "expected": "200 + {items,pagination}",
+      "actual_status": 200,
+      "request_id": "req_57c10c22ceae",
+      "actual_body": {
+        "items": [],
+        "pagination": {
+          "page": 1,
+          "page_size": 20,
+          "total": 0
+        }
+      },
+      "pass": true
+    },
+    {
+      "name": "sessions_get_shape_or_404",
+      "expected": "200 + {session_id, items} or 404",
+      "actual_status": 200,
+      "request_id": "req_49a5df976535",
+      "actual_body": {
+        "session_id": "ses_test_not_exist",
+        "items": []
+      },
+      "pass": true
+    },
+    {
+      "name": "sessions_delete",
+      "expected": "204 or 404 (unified error if fail)",
+      "actual_status": 204,
+      "request_id": "req_41e85a543f41",
+      "actual_body": "",
+      "pass": true
+    },
+    {
+      "name": "chat_sync",
+      "expected": "200 + ChatResponse",
+      "actual_status": 200,
+      "request_id": "req_1a9726607db5",
+      "actual_body": {
+        "session_id": "ses_faa3abe6bfdb",
+        "message": {
+          "message_id": "msg_fb24fd9781ff",
+          "role": "assistant",
+          "content": "Echo: hello",
+          "timestamp": "2026-04-13T15:21:28.553291Z",
+          "rag_trace": null
+        }
+      },
+      "pass": true
+    },
+    {
+      "name": "chat_stream_method_and_media",
+      "expected": "POST 200 text/event-stream",
+      "actual_status": 200,
+      "request_id": "req_91adfa3961c4",
+      "actual_body": "event: meta\ndata: {\"request_id\": \"req_stream\", \"session_id\": \"ses_1cf43d7182b9\", \"message_id\": \"msg_f563adf5d917\"}\n\nevent: content\ndata: {\"delta\": \"Echo: \"}\n\nevent: content\ndata: {\"delta\": \"hello\"}\n\nevent: done\ndata: \"[DONE]\"\n\n",
+      "pass": true
+    },
+    {
+      "name": "documents_list_shape",
+      "expected": "200 + {items,pagination}",
+      "actual_status": 200,
+      "request_id": "req_862e44f83aa3",
+      "actual_body": {
+        "items": [
+          {
+            "document_id": "doc_28f3ff13a092",
+            "filename": "bad.txt",
+            "file_type": "text/plain",
+            "file_size": 3,
+            "status": "failed",
+            "chunk_strategy": "general",
+            "chunk_count": null,
+            "uploaded_at": "2026-04-13T15:21:28.557218Z",
+            "ready_at": null
+          },
+          {
+            "document_id": "doc_0b53c7bb0bb4",
+            "filename": "ok.txt",
+            "file_type": "text/plain",
+            "file_size": 29,
+            "status": "ready",
+            "chunk_strategy": "general",
+            "chunk_count": 5,
+            "uploaded_at": "2026-04-13T15:21:28.555838Z",
+            "ready_at": "2026-04-13T15:21:28.555934Z"
+          }
+        ],
+        "pagination": {
+          "page": 1,
+          "page_size": 20,
+          "total": 2
+        }
+      },
+      "pass": true
+    },
+    {
+      "name": "documents_forbidden",
+      "expected": "403 + AUTH_FORBIDDEN",
+      "actual_status": 403,
+      "request_id": "req_f1d66c86ddd9",
+      "actual_body": {
+        "code": "AUTH_FORBIDDEN",
+        "message": "Forbidden",
+        "detail": null,
+        "request_id": "req_f1d66c86ddd9"
+      },
+      "pass": true
+    },
+    {
+      "name": "documents_upload_accepted",
+      "expected": "202 + {job_id,document_id,status=queued,message}",
+      "actual_status": 202,
+      "request_id": "req_8459751de44c",
+      "actual_body": {
+        "job_id": "job_a60e33c242d6",
+        "document_id": "doc_0b53c7bb0bb4",
+        "status": "queued",
+        "message": "Document accepted for async indexing"
+      },
+      "pass": true
+    },
+    {
+      "name": "documents_build_single",
+      "expected": "202 + accepted payload",
+      "actual_status": 202,
+      "request_id": "req_fd5c48972d27",
+      "actual_body": {
+        "job_id": "job_3af789897311",
+        "document_id": "doc_0b53c7bb0bb4",
+        "status": "queued",
+        "message": "Document accepted for async indexing"
+      },
+      "pass": true
+    },
+    {
+      "name": "documents_build_single_invalid_strategy",
+      "expected": "422 + DOC_INVALID_CHUNK_STRATEGY",
+      "actual_status": 422,
+      "request_id": "req_1acd0da17564",
+      "actual_body": {
+        "code": "DOC_INVALID_CHUNK_STRATEGY",
+        "message": "Invalid chunk strategy",
+        "detail": null,
+        "request_id": "req_1acd0da17564"
+      },
+      "pass": true
+    },
+    {
+      "name": "documents_chunks_ready_page1",
+      "expected": "200 + items/pagination",
+      "actual_status": 200,
+      "request_id": "req_1fa3d3f077ab",
+      "actual_body": {
+        "items": [
+          {
+            "chunk_id": "chk_dcbea88e454e",
+            "document_id": "doc_0b53c7bb0bb4",
+            "chunk_index": 0,
+            "content": "line1",
+            "keywords": [
+              "line1"
+            ],
+            "generated_questions": [
+              "What is the key point of chunk 0?"
+            ],
+            "metadata": {
+              "length": 5,
+              "embedding_ref": "815750a4587b9b61"
+            }
+          },
+          {
+            "chunk_id": "chk_31b4a10f81e5",
+            "document_id": "doc_0b53c7bb0bb4",
+            "chunk_index": 1,
+            "content": "line2",
+            "keywords": [
+              "line2"
+            ],
+            "generated_questions": [
+              "What is the key point of chunk 1?"
+            ],
+            "metadata": {
+              "length": 5,
+              "embedding_ref": "cc8fda49721ac478"
+            }
+          }
+        ],
+        "pagination": {
+          "page": 1,
+          "page_size": 2,
+          "total": 5
+        }
+      },
+      "pass": true
+    },
+    {
+      "name": "documents_chunks_ready_page999",
+      "expected": "200 + empty items + pagination total stable",
+      "actual_status": 200,
+      "request_id": "req_fdc4dbbddf82",
+      "actual_body": {
+        "items": [],
+        "pagination": {
+          "page": 999,
+          "page_size": 2,
+          "total": 5
+        }
+      },
+      "pass": true
+    },
+    {
+      "name": "documents_chunks_not_ready",
+      "expected": "409 + DOC_CHUNK_RESULT_NOT_READY",
+      "actual_status": 409,
+      "request_id": "req_528481c5c540",
+      "actual_body": {
+        "code": "DOC_CHUNK_RESULT_NOT_READY",
+        "message": "Chunk result not ready",
+        "detail": null,
+        "request_id": "req_528481c5c540"
+      },
+      "pass": true
+    },
+    {
+      "name": "documents_jobs_list",
+      "expected": "200 + items/pagination",
+      "actual_status": 200,
+      "request_id": "req_b19412c370c9",
+      "actual_body": {
+        "items": [
+          {
+            "job_id": "job_3af789897311",
+            "document_id": "doc_0b53c7bb0bb4",
+            "status": "succeeded",
+            "stage": "completed",
+            "progress": 100,
+            "message": "Document indexed",
+            "error_code": null,
+            "created_at": "2026-04-13T15:21:28.559109Z",
+            "updated_at": "2026-04-13T15:21:28.559155Z",
+            "finished_at": "2026-04-13T15:21:28.559155Z"
+          },
+          {
+            "job_id": "job_115c6ebd9200",
+            "document_id": "doc_28f3ff13a092",
+            "status": "failed",
+            "stage": "failed",
+            "progress": 25,
+            "message": "Document parse failed",
+            "error_code": "DOC_PARSE_ERROR",
+            "created_at": "2026-04-13T15:21:28.557214Z",
+            "updated_at": "2026-04-13T15:21:28.557244Z",
+            "finished_at": "2026-04-13T15:21:28.557244Z"
+          },
+          {
+            "job_id": "job_a60e33c242d6",
+            "document_id": "doc_0b53c7bb0bb4",
+            "status": "succeeded",
+            "stage": "completed",
+            "progress": 100,
+            "message": "Document indexed",
+            "error_code": null,
+            "created_at": "2026-04-13T15:21:28.555830Z",
+            "updated_at": "2026-04-13T15:21:28.555934Z",
+            "finished_at": "2026-04-13T15:21:28.555934Z"
+          }
+        ],
+        "pagination": {
+          "page": 1,
+          "page_size": 20,
+          "total": 3
+        }
+      },
+      "pass": true
+    },
+    {
+      "name": "documents_jobs_get_ready",
+      "expected": "200 + DocumentBuildJob fields",
+      "actual_status": 200,
+      "request_id": "req_912ee0ae3da0",
+      "actual_body": {
+        "job_id": "job_a60e33c242d6",
+        "document_id": "doc_0b53c7bb0bb4",
+        "status": "succeeded",
+        "stage": "completed",
+        "progress": 100,
+        "message": "Document indexed",
+        "error_code": null,
+        "created_at": "2026-04-13T15:21:28.555830Z",
+        "updated_at": "2026-04-13T15:21:28.555934Z",
+        "finished_at": "2026-04-13T15:21:28.555934Z"
+      },
+      "pass": true
+    },
+    {
+      "name": "documents_jobs_get_failed",
+      "expected": "200 + failed with error_code",
+      "actual_status": 200,
+      "request_id": "req_51a241aa4946",
+      "actual_body": {
+        "job_id": "job_115c6ebd9200",
+        "document_id": "doc_28f3ff13a092",
+        "status": "failed",
+        "stage": "failed",
+        "progress": 25,
+        "message": "Document parse failed",
+        "error_code": "DOC_PARSE_ERROR",
+        "created_at": "2026-04-13T15:21:28.557214Z",
+        "updated_at": "2026-04-13T15:21:28.557244Z",
+        "finished_at": "2026-04-13T15:21:28.557244Z"
+      },
+      "pass": true
+    },
+    {
+      "name": "documents_jobs_cancel_finished",
+      "expected": "409 + DOC_JOB_STATE_CONFLICT",
+      "actual_status": 409,
+      "request_id": "req_991e037df891",
+      "actual_body": {
+        "code": "DOC_JOB_STATE_CONFLICT",
+        "message": "Job already finished",
+        "detail": null,
+        "request_id": "req_991e037df891"
+      },
+      "pass": true
+    },
+    {
+      "name": "documents_jobs_stream_failed_semantics",
+      "expected": "200 SSE progress/error/done and fields aligned to polling",
+      "actual_status": 200,
+      "request_id": "req_cc875795d90c",
+      "actual_body": {
+        "raw": "event: progress\ndata: {\"job_id\": \"job_115c6ebd9200\", \"status\": \"failed\", \"stage\": \"failed\", \"progress\": 25, \"message\": \"Document parse failed\", \"error_code\": \"DOC_PARSE_ERROR\"}\n\nevent: error\ndata: {\"job_id\": \"job_115c6ebd9200\", \"status\": \"failed\", \"stage\": \"failed\", \"progress\": 25, \"message\": \"Document parse failed\", \"error_code\": \"DOC_PARSE_ERROR\", \"detail\": null}\n\nevent: done\ndata: {\"job_id\": \"job_115c6ebd9200\", \"status\": \"failed\", \"stage\": \"failed\", \"progress\": 25, \"message\": \"Document parse failed\", \"error_code\": \"DOC_PARSE_ERROR\", \"detail\": null}\n\n",
+        "events": [
+          {
+            "event": "progress",
+            "data": {
+              "job_id": "job_115c6ebd9200",
+              "status": "failed",
+              "stage": "failed",
+              "progress": 25,
+              "message": "Document parse failed",
+              "error_code": "DOC_PARSE_ERROR"
+            }
+          },
+          {
+            "event": "error",
+            "data": {
+              "job_id": "job_115c6ebd9200",
+              "status": "failed",
+              "stage": "failed",
+              "progress": 25,
+              "message": "Document parse failed",
+              "error_code": "DOC_PARSE_ERROR",
+              "detail": null
+            }
+          },
+          {
+            "event": "done",
+            "data": {
+              "job_id": "job_115c6ebd9200",
+              "status": "failed",
+              "stage": "failed",
+              "progress": 25,
+              "message": "Document parse failed",
+              "error_code": "DOC_PARSE_ERROR",
+              "detail": null
+            }
+          }
+        ]
+      },
+      "pass": true
+    },
+    {
+      "name": "documents_batch_build_mixed",
+      "expected": "202 + items (+ partial failure detail)",
+      "actual_status": 202,
+      "request_id": "req_d71d88555b07",
+      "actual_body": {
+        "items": [
+          {
+            "document_id": "doc_0b53c7bb0bb4",
+            "job_id": "job_41aaf84c28ac",
+            "status": "queued"
+          }
+        ],
+        "failed_items": [
+          {
+            "document_id": "doc_missing_for_batch",
+            "error_code": "RESOURCE_NOT_FOUND",
+            "message": "Document not found",
+            "detail": null
+          }
+        ]
+      },
+      "pass": true
+    },
+    {
+      "name": "documents_batch_delete_validation",
+      "expected": "422 unified error model",
+      "actual_status": 422,
+      "request_id": "req_732735b9bb5d",
+      "actual_body": {
+        "code": "VALIDATION_ERROR",
+        "message": "Request validation failed",
+        "detail": {
+          "errors": [
+            {
+              "type": "missing",
+              "loc": [
+                "body",
+                "document_ids"
+              ],
+              "msg": "Field required",
+              "input": {}
+            }
+          ]
+        },
+        "request_id": "req_732735b9bb5d"
+      },
+      "pass": true
+    },
+    {
+      "name": "documents_batch_delete_mixed",
+      "expected": "200 + success_ids + failed_items(code,message)",
+      "actual_status": 200,
+      "request_id": "req_a7afae104dd9",
+      "actual_body": {
+        "success_ids": [
+          "doc_0b53c7bb0bb4"
+        ],
+        "failed_items": [
+          {
+            "document_id": "doc_missing_for_delete",
+            "code": "RESOURCE_NOT_FOUND",
+            "message": "Document not found"
+          }
+        ]
+      },
+      "pass": true
+    },
+    {
+      "name": "documents_delete_by_filename_existing",
+      "expected": "204",
+      "actual_status": 204,
+      "request_id": "req_3ab11e9b4699",
+      "actual_body": "",
+      "pass": true
+    },
+    {
+      "name": "documents_delete_by_filename_missing",
+      "expected": "404 + unified error model",
+      "actual_status": 404,
+      "request_id": "req_79fc4dd670fe",
+      "actual_body": {
+        "code": "RESOURCE_NOT_FOUND",
+        "message": "Document not found",
+        "detail": null,
+        "request_id": "req_79fc4dd670fe"
+      },
+      "pass": true
+    }
+  ],
+  "summary": {
+    "total_checks": 27,
+    "passed": 27,
+    "failed": 0,
+    "pass_rate": 1.0
+  },
+  "artifacts": {
+    "ready_upload": {
+      "request_id": "req_8459751de44c",
+      "document_id": "doc_0b53c7bb0bb4",
+      "job_id": "job_a60e33c242d6"
+    },
+    "failed_upload": {
+      "request_id": "req_0af937c8df82",
+      "document_id": "doc_28f3ff13a092",
+      "job_id": "job_115c6ebd9200"
+    },
+    "delete_seed": {
+      "request_id": "req_b079b11d3c3f",
+      "document_id": "doc_5c8e647df3d9",
+      "job_id": "job_696f81e3dfd1"
+    }
+  }
+}

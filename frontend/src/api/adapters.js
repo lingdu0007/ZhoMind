@@ -44,6 +44,22 @@ export const apiAdapter = {
     });
     return data;
   },
+  async buildDocument(documentId, payload) {
+    const { data } = await http.post(`/documents/${encodeURIComponent(documentId)}/build`, payload);
+    return data;
+  },
+  async batchBuildDocuments(payload) {
+    const { data } = await http.post('/documents/batch-build', payload);
+    return data;
+  },
+  async batchDeleteDocuments(payload) {
+    const { data } = await http.post('/documents/batch-delete', payload);
+    return data;
+  },
+  async getDocumentChunks(documentId, params) {
+    const { data } = await http.get(`/documents/${encodeURIComponent(documentId)}/chunks`, { params });
+    return data;
+  },
   async deleteDocument(filename) {
     const { data } = await http.delete(`/documents/${encodeURIComponent(filename)}`);
     return data;
