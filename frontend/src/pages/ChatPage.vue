@@ -1,63 +1,44 @@
 <template>
-  <section ref="chatSectionRef">
-    <div class="top-row">
-      <h1 class="page-title">聊天</h1>
-      <div class="auth-actions">
-        <el-button v-if="!authStore.isLoggedIn" type="primary" @click="authDialogVisible = true">登录 / 注册</el-button>
-        <template v-else>
-          <span class="user-tag">{{ authStore.username }} ({{ authStore.role }})</span>
-          <el-button @click="logout">退出</el-button>
+  <section ref="chatSectionRef" class="chat-page">
+    <div class="top-bar">
+      <div>
+        <h1>Chat · Knowledge Pulse</h1>
+        <p class="subtitle" v-if="chatStore.loading">Streaming…</p>
+      </div>
+      <div class="top-actions">
+        <el-button class="btn-ghost" @click="toggleSessions">会话</el-button>
+        <template v-if="authStore.isLoggedIn">
+          <span class="user-pill">{{ authStore.username }} · {{ authStore.role }}</span>
+          <el-button text @click="logout">退出</el-button>
         </template>
+        <el-button v-else type="primary" @click="authDialogVisible = true">登录 / 注册</el-button>
       </div>
     </div>
 
-    <div class="chat-layout">
-      <aside class="panel session-panel">
-        <div class="session-header">
-          <h3>会话</h3>
-          <el-button size="small" @click="loadSessions">刷新</el-button>
-        </div>
-        <div class="session-list">
-          <div
-            v-for="item in chatStore.sessions"
-            :key="item.session_id || item.id"
-            class="session-item"
-            :class="{ active: (item.session_id || item.id) === chatStore.activeSessionId }"
-            @click="openSession(item.session_id || item.id)"
-          >
-            <div class="session-meta">
-              <span class="session-title">{{ item.session_id || item.id }}</span>
-              <span class="session-sub">{{ item.updated_at || '' }} · {{ item.message_count ?? 0 }}条</span>
-            </div>
-            <el-button link type="danger" @click.stop="removeSession(item.session_id || item.id)">删除</el-button>
-          </div>
-        </div>
-      </aside>
+    <SessionDrawer
+      :visible="sessionVisible"
+      :sessions="chatStore.sessions"
+      :active-id="chatStore.activeSessionId"
+      @select="openSession"
+      @remove="removeSession"
+      @refresh="loadSessions"
+      @close="sessionVisible = false"
+    />
 
-      <div class="chat-main">
-        <ChatMessageList :messages="chatStore.messages" />
+    <ChatMessageList :messages="chatStore.messages" />
 
-        <div class="panel composer">
-          <el-input
-            v-model="input"
-            type="textarea"
-            :rows="3"
-            placeholder="请输入问题，系统将走 Agentic RAG 检索与回答"
-          />
-          <div class="actions">
-            <el-button
-              v-if="chatStore.loading"
-              type="danger"
-              plain
-              @click="chatStore.stopStreaming"
-            >
-              停止生成
-            </el-button>
-            <el-button type="primary" :loading="chatStore.loading" :disabled="!authStore.isLoggedIn || chatStore.loading" @click="onSend">
-              发送
-            </el-button>
-          </div>
-        </div>
+    <div class="composer card">
+      <el-input
+        v-model="input"
+        type="textarea"
+        :rows="3"
+        placeholder="请输入问题，系统将执行 Agentic RAG 工作流"
+      />
+      <div class="composer-actions">
+        <el-button class="btn-ghost" :disabled="!chatStore.loading" @click="chatStore.stopStreaming">停止</el-button>
+        <el-button type="primary" :loading="chatStore.loading" :disabled="!authStore.isLoggedIn" @click="onSend">
+          发送
+        </el-button>
       </div>
     </div>
 
@@ -99,6 +80,7 @@
 import { nextTick, onMounted, reactive, ref, watch } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import ChatMessageList from '../components/ChatMessageList.vue';
+import SessionDrawer from '../components/SessionDrawer.vue';
 import { useChatStore } from '../store/chat';
 import { useAuthStore } from '../store/auth';
 
@@ -106,12 +88,7 @@ const chatStore = useChatStore();
 const authStore = useAuthStore();
 const input = ref('');
 const chatSectionRef = ref(null);
-
-const scrollToBottom = async () => {
-  await nextTick();
-  if (!chatSectionRef.value) return;
-  chatSectionRef.value.scrollIntoView({ behavior: 'smooth', block: 'end' });
-};
+const sessionVisible = ref(false);
 
 const authDialogVisible = ref(false);
 const authMode = ref('login');
@@ -121,6 +98,12 @@ const authForm = reactive({
   role: 'user',
   admin_code: ''
 });
+
+const scrollToBottom = async () => {
+  await nextTick();
+  if (!chatSectionRef.value) return;
+  chatSectionRef.value.scrollIntoView({ behavior: 'smooth', block: 'end' });
+};
 
 const loadSessions = async () => {
   if (!authStore.isLoggedIn) return;
@@ -134,6 +117,7 @@ const loadSessions = async () => {
 const openSession = async (sessionId) => {
   try {
     await chatStore.loadSessionMessages(sessionId);
+    sessionVisible.value = false;
   } catch (error) {
     ElMessage.error(error.message || '加载会话消息失败');
   }
@@ -146,6 +130,17 @@ const removeSession = async (sessionId) => {
     ElMessage.success('会话已删除');
   } catch (error) {
     if (error !== 'cancel') ElMessage.error(error.message || '删除会话失败');
+  }
+};
+
+const toggleSessions = async () => {
+  if (!authStore.isLoggedIn) {
+    ElMessage.warning('请先登录');
+    return;
+  }
+  sessionVisible.value = !sessionVisible.value;
+  if (sessionVisible.value) {
+    await loadSessions();
   }
 };
 
@@ -208,87 +203,32 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.top-row {
+.chat-page {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 12px;
-}
-
-.user-tag {
-  margin-right: 8px;
-  color: var(--color-muted);
-}
-
-.chat-layout {
-  display: grid;
-  grid-template-columns: 260px 1fr;
+  flex-direction: column;
   gap: 16px;
 }
 
-.session-panel {
-  min-height: 620px;
-}
-
-.session-header {
+.top-actions {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  margin-bottom: 8px;
-}
-
-.session-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.session-item {
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-  padding: 8px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  cursor: pointer;
-}
-
-.session-item.active {
-  border-color: var(--color-primary);
-  background: #eef4ff;
-}
-
-.session-meta {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-
-.session-title {
-  font-size: 13px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 165px;
-}
-
-.session-sub {
-  margin-top: 2px;
-  font-size: 12px;
-  color: var(--color-muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 165px;
+  gap: 12px;
 }
 
 .composer {
-  margin-top: 16px;
+  margin-top: 12px;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  position: sticky;
+  bottom: 24px;
+  backdrop-filter: blur(10px);
 }
 
-.actions {
-  margin-top: 12px;
+.composer-actions {
   display: flex;
   justify-content: flex-end;
+  gap: 12px;
 }
 </style>

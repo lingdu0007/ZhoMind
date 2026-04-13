@@ -1,15 +1,17 @@
 <template>
-  <div ref="listRef" class="message-list panel">
+  <div ref="listRef" class="message-list card">
     <div v-if="messages.length === 0" class="empty">开始提问，系统会基于知识库回复。</div>
-    <div v-for="(msg, idx) in messages" :key="idx" class="msg" :class="msg.role">
-      <div class="role">{{ msg.role === 'user' ? '你' : '助手' }}</div>
+    <article v-for="(msg, idx) in messages" :key="idx" class="msg">
+      <header class="msg-head">
+        <span class="role" :class="msg.role">{{ msg.role === 'user' ? '你' : '助手' }}</span>
+        <span v-if="msg.isThinking" class="status-dot">思考中...</span>
+        <span v-else-if="msg.streaming" class="status-dot">Streaming…</span>
+        <span v-else-if="msg.status" class="status-text">{{ msg.status }}</span>
+      </header>
       <div class="content">{{ msg.content }}</div>
 
-      <div v-if="msg.isThinking" class="stream-status">思考中...</div>
-      <div v-else-if="msg.streaming || msg.status" class="stream-status">{{ msg.status || '生成中...' }}</div>
-
       <div v-if="msg.rag_steps?.length" class="steps">
-        <div class="ref-title">检索步骤：</div>
+        <strong>检索步骤</strong>
         <ul>
           <li v-for="(step, i) in msg.rag_steps" :key="i">{{ step }}</li>
         </ul>
@@ -22,7 +24,7 @@
           </el-collapse-item>
         </el-collapse>
       </div>
-    </div>
+    </article>
   </div>
 </template>
 
@@ -63,32 +65,45 @@ watch(
 
 <style scoped>
 .message-list {
+  padding: 24px;
   min-height: 480px;
-  max-height: 68vh;
-  overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 16px;
+  max-height: calc(70vh);
+  overflow-y: auto;
 }
 
 .empty {
-  color: var(--color-muted);
+  color: var(--text-muted);
 }
 
 .msg {
-  padding: 12px;
-  border-radius: 10px;
-  border: 1px solid var(--color-border);
-}
-
-.msg.user {
-  background: #eef4ff;
+  border: 1px solid var(--line-soft);
+  border-radius: 18px;
+  padding: 20px;
+  box-shadow: 0 2px 10px rgba(15, 23, 42, 0.04);
 }
 
 .role {
-  font-size: 12px;
-  color: var(--color-muted);
-  margin-bottom: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.role.user {
+  color: var(--cta);
+}
+
+.role.assistant {
+  color: var(--primary);
+}
+
+.msg-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
 }
 
 .content {
@@ -99,13 +114,19 @@ watch(
 .stream-status {
   margin-top: 8px;
   font-size: 12px;
-  color: #2563eb;
+  color: var(--cta);
+}
+
+.status-dot,
+.status-text {
+  font-size: 12px;
+  color: var(--cta);
 }
 
 .steps {
   margin-top: 8px;
   font-size: 13px;
-  color: #374151;
+  color: var(--text-muted);
 }
 
 .ref-title {

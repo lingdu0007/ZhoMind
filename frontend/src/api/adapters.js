@@ -83,6 +83,7 @@ export const streamChat = async ({ message, session_id, signal }, handlers = {})
   const reader = response.body.getReader();
   const decoder = new TextDecoder('utf-8');
   let buffer = '';
+  let eventBuffer = [];
 
   const dispatch = (event) => {
     if (!event) return;
@@ -115,36 +116,45 @@ export const streamChat = async ({ message, session_id, signal }, handlers = {})
     handlers.onUnknown?.(event);
   };
 
+  const flushEventBuffer = () => {
+    if (!eventBuffer.length) return;
+    const payload = eventBuffer.join('\n');
+    const event = parseSSEPayload(payload);
+    dispatch(event);
+    eventBuffer = [];
+  };
+
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
 
     buffer += decoder.decode(value, { stream: true });
-    const normalized = buffer.replace(/\r\n/g, '\n');
-    const chunks = normalized.split('\n\n');
+    const lines = buffer.split(/\r?\n/);
+    buffer = lines.pop() ?? '';
 
-    if (!normalized.endsWith('\n\n')) {
-      buffer = chunks.pop() || '';
-    } else {
-      buffer = '';
-    }
+    for (const line of lines) {
+      const trimmed = line.trim();
 
-    for (const chunk of chunks) {
-      const lines = chunk.split('\n');
-      const dataLines = [];
-
-      for (const line of lines) {
-        if (line.startsWith('data:')) {
-          dataLines.push(line.slice(5).trim());
-        }
+      if (!trimmed) {
+        flushEventBuffer();
+        continue;
       }
 
-      const payload = dataLines.join('\n');
-      const event = parseSSEPayload(payload);
+      if (trimmed.startsWith('data:')) {
+        if (eventBuffer.length) {
+          flushEventBuffer();
+        }
+        eventBuffer.push(trimmed.slice(5).trim());
+        continue;
+      }
+
+      // 兼容后端直接推送纯 JSON/文本的情况
+      const event = parseSSEPayload(trimmed);
       dispatch(event);
       if (event?.type === 'done') return;
     }
   }
 
+  flushEventBuffer();
   handlers.onDone?.();
 };

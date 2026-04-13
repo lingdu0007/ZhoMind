@@ -1,15 +1,29 @@
 <template>
-  <div class="app-shell">
-    <aside class="sidebar">
-      <div class="brand">ZhoMind</div>
-      <el-menu :default-active="activePath" router class="menu">
-        <el-menu-item index="/chat">聊天</el-menu-item>
-        <el-menu-item index="/documents">文档上传</el-menu-item>
-        <el-menu-item index="/config">配置页</el-menu-item>
-      </el-menu>
+  <div class="layout-shell">
+    <aside class="layout-sidebar">
+      <div class="brand">
+        <span class="logo-dot" />
+        <span>ZhoMind</span>
+      </div>
+      <nav class="nav-list">
+        <RouterLink
+          v-for="item in navItems"
+          :key="item.path"
+          :to="item.path"
+          class="nav-link"
+          :class="{ active: currentPath.startsWith(item.path) }"
+        >
+          <component :is="item.icon" class="nav-icon" />
+          <span>{{ item.label }}</span>
+        </RouterLink>
+      </nav>
     </aside>
-    <main class="main-content">
-      <router-view />
+    <main class="layout-main">
+      <div class="grid-12">
+        <section class="col-span-8 col-start-3 main-slot">
+          <router-view />
+        </section>
+      </div>
     </main>
   </div>
 </template>
@@ -17,39 +31,60 @@
 <script setup>
 import { computed } from 'vue';
 import { useRoute } from 'vue-router';
+import { MessageCircle, FileText, SlidersHorizontal } from 'lucide-vue-next';
 
 const route = useRoute();
-const activePath = computed(() => route.path);
+const currentPath = computed(() => route.path);
+const navItems = [
+  { path: '/chat', label: '聊天', icon: MessageCircle },
+  { path: '/documents', label: '文档', icon: FileText },
+  { path: '/config', label: '配置', icon: SlidersHorizontal }
+];
 </script>
 
 <style scoped>
-.app-shell {
-  display: grid;
-  grid-template-columns: 220px 1fr;
-  min-height: 100vh;
-  background: var(--color-bg);
-}
-
-.sidebar {
-  border-right: 1px solid var(--color-border);
-  background: #fff;
-  padding: 20px 12px;
-}
-
 .brand {
-  font-size: 20px;
-  font-weight: 700;
-  color: var(--color-primary);
-  margin-bottom: 24px;
-  padding: 0 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 18px;
+  font-weight: 600;
 }
 
-.menu {
-  border-right: none;
+.logo-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--cta);
+  display: inline-block;
 }
 
-.main-content {
-  padding: 20px;
-  overflow: auto;
+.nav-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.nav-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  color: var(--text-muted);
+}
+
+.nav-link.active {
+  background: #e2e8f0;
+  color: var(--text-strong);
+}
+
+.nav-icon {
+  width: 18px;
+  height: 18px;
+}
+
+.main-slot {
+  padding-bottom: 80px;
 }
 </style>

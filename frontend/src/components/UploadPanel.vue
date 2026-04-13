@@ -1,11 +1,12 @@
 <template>
-  <div class="panel">
+  <div class="upload-card card">
     <el-upload
       drag
       :auto-upload="false"
       :on-change="handleFileChange"
       :show-file-list="true"
       accept=".txt,.md,.pdf,.doc,.docx,.xls,.xlsx"
+      class="upload-drop"
     >
       <el-icon><upload-filled /></el-icon>
       <div class="el-upload__text">拖拽文件到这里，或 <em>点击选择</em></div>
@@ -15,7 +16,7 @@
     </el-upload>
 
     <div class="actions">
-      <el-button type="primary" :loading="loading" @click="submit">上传并解析</el-button>
+      <el-button class="btn-primary" :loading="loading" @click="submit">上传并解析</el-button>
     </div>
   </div>
 </template>
@@ -57,8 +58,19 @@ const submit = async () => {
 </script>
 
 <style scoped>
+.upload-card {
+  padding: 32px;
+}
+
+.upload-drop {
+  border: 1px dashed var(--line-strong);
+  border-radius: 16px;
+  background: var(--bg-shell);
+  padding: 12px 0;
+}
+
 .actions {
-  margin-top: 16px;
+  margin-top: 24px;
   display: flex;
   justify-content: flex-end;
 }

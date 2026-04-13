@@ -34,6 +34,9 @@ temp/
 docs/
 
 .codex
+.superpowers/
+.npm-cache/
+.worktrees/
 # AI 工具规则文件
 CLAUDE.md
 RULE.md
