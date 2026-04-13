@@ -15,17 +15,17 @@ export default defineConfig({
     host: '0.0.0.0',
     port: 5173,
     proxy: {
-      '/chat': {
+      '/api': {
         ...proxyOptions,
+        rewrite: (path) => path.replace(/^\/api/, ''),
         configure: (proxy) => {
-          proxy.on('proxyRes', (proxyRes) => {
-            proxyRes.headers['Cache-Control'] = 'no-cache';
+          proxy.on('proxyRes', (proxyRes, req) => {
+            if (req.url?.startsWith('/api/chat/stream')) {
+              proxyRes.headers['Cache-Control'] = 'no-cache';
+            }
           });
         }
-      },
-      '/sessions': proxyOptions,
-      '/documents': proxyOptions,
-      '/auth': proxyOptions
+      }
     }
   }
 });

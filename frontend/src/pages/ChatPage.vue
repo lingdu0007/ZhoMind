@@ -6,6 +6,7 @@
         <p class="subtitle" v-if="chatStore.loading">Streaming…</p>
       </div>
       <div class="top-actions">
+        <el-button class="btn-ghost" @click="startNewSession">新建会话</el-button>
         <el-button class="btn-ghost" @click="toggleSessions">会话</el-button>
         <template v-if="authStore.isLoggedIn">
           <span class="user-pill">{{ authStore.username }} · {{ authStore.role }}</span>
@@ -142,6 +143,11 @@ const toggleSessions = async () => {
   if (sessionVisible.value) {
     await loadSessions();
   }
+};
+
+const startNewSession = () => {
+  chatStore.activeSessionId = '';
+  chatStore.messages = [];
 };
 
 const submitAuth = async () => {

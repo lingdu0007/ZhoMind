@@ -24,7 +24,13 @@ export const useChatStore = defineStore('chat', {
       const data = await apiAdapter.listSessions();
       this.sessions = data?.sessions || data?.items || data?.data || [];
       if (!this.activeSessionId && this.sessions.length > 0) {
-        this.activeSessionId = this.sessions[0].session_id || this.sessions[0].id || '';
+        const preferred =
+          this.sessions.find((item) => (item.session_id || item.id) !== 'default_session') ||
+          this.sessions[0];
+        const candidate = preferred.session_id || preferred.id || '';
+        if (candidate && candidate !== 'default_session') {
+          this.activeSessionId = candidate;
+        }
       }
     },
     async loadSessionMessages(sessionId) {
@@ -59,8 +65,13 @@ export const useChatStore = defineStore('chat', {
     async sendMessage(question) {
       if (!question?.trim() || this.loading) return;
 
+      if (!this.activeSessionId || this.activeSessionId === 'default_session') {
+        this.activeSessionId = `session_${Date.now()}`;
+      }
+
       this.messages.push({ role: 'user', content: question });
-      const assistantMsg = {
+      const assistantIndex = this.messages.length;
+      this.messages.push({
         role: 'assistant',
         content: '',
         rag_trace: null,
@@ -68,8 +79,9 @@ export const useChatStore = defineStore('chat', {
         streaming: true,
         isThinking: true,
         status: '思考中...'
-      };
-      this.messages.push(assistantMsg);
+      });
+
+      const getAssistantMsg = () => this.messages[assistantIndex];
 
       this.loading = true;
       this.streamController = new AbortController();
@@ -83,6 +95,8 @@ export const useChatStore = defineStore('chat', {
           },
           {
             onContent: (chunk) => {
+              const assistantMsg = getAssistantMsg();
+              if (!assistantMsg) return;
               assistantMsg.isThinking = false;
               assistantMsg.streaming = true;
               assistantMsg.status = '生成中...';
@@ -90,13 +104,19 @@ export const useChatStore = defineStore('chat', {
               this.streamTick += 1;
             },
             onRagStep: (step) => {
+              const assistantMsg = getAssistantMsg();
+              if (!assistantMsg) return;
               assistantMsg.rag_steps.push(toText(step));
               this.streamTick += 1;
             },
             onTrace: (trace) => {
+              const assistantMsg = getAssistantMsg();
+              if (!assistantMsg) return;
               assistantMsg.rag_trace = trace;
             },
             onError: (err) => {
+              const assistantMsg = getAssistantMsg();
+              if (!assistantMsg) return;
               assistantMsg.streaming = false;
               assistantMsg.isThinking = false;
               assistantMsg.status = '生成失败';
@@ -106,6 +126,8 @@ export const useChatStore = defineStore('chat', {
               this.streamTick += 1;
             },
             onDone: () => {
+              const assistantMsg = getAssistantMsg();
+              if (!assistantMsg) return;
               assistantMsg.streaming = false;
               assistantMsg.isThinking = false;
               assistantMsg.status = '';
@@ -114,6 +136,8 @@ export const useChatStore = defineStore('chat', {
           }
         );
       } catch (error) {
+        const assistantMsg = getAssistantMsg();
+        if (!assistantMsg) return;
         assistantMsg.streaming = false;
         assistantMsg.isThinking = false;
         if (error?.name === 'AbortError') {
