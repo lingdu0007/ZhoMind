@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from alembic import command
 from alembic.config import Config
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+from alembic import command
 from src.infrastructure.db.models import DocumentModel, UserModel
 from src.infrastructure.db.repositories import RetrievalRepository
 from src.infrastructure.retrieval.bm25_store import Bm25Store
@@ -34,14 +34,12 @@ def test_index_sync_rebuild_and_delete(tmp_path: Path) -> None:
         sync = RetrievalIndexSyncService(session_factory=session_factory, vector_store=vector_store, bm25_store=bm25_store)
 
         async with session_factory() as session:
-            session.add(UserModel(username="u1", password_hash="hash", role="user"))
+            session.add(UserModel(id="user_sync", username="u1", password_hash="hash", role="user"))
             session.add(
                 DocumentModel(
-                    document_id="doc_sync",
+                    id="doc_sync",
                     filename="sync.txt",
-                    file_type="text/plain",
-                    file_size=12,
-                    status="processing",
+                    status="uploaded",
                     chunk_strategy="general",
                 )
             )

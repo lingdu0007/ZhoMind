@@ -1,4 +1,8 @@
+from pathlib import Path
+
 from pydantic import BaseModel, Field
+
+__path__ = [str(Path(__file__).with_suffix(""))]
 
 
 class ErrorResponse(BaseModel):

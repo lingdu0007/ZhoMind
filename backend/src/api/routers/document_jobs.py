@@ -4,10 +4,11 @@ import logging
 from fastapi import APIRouter, Depends, Query, Request, status
 from fastapi.responses import StreamingResponse
 
-from src.api.dependencies import get_current_subject
+from src.api.dependencies import require_admin
 from src.infrastructure.logging.observability import log_event
 from src.shared.exceptions import AppError
 from src.shared.schemas import ListResponse, PaginationMeta
+from src.shared.schemas.jobs import JobCancelAccepted, JobItem
 
 router = APIRouter(prefix="/documents/jobs", tags=["documents"])
 logger = logging.getLogger(__name__)
@@ -42,11 +43,6 @@ def _paginate(items: list[dict], page: int, page_size: int) -> ListResponse:
     )
 
 
-def _require_admin(subject: dict) -> None:
-    if subject.get("role") != "admin":
-        raise AppError("AUTH_FORBIDDEN", "Forbidden", status_code=403)
-
-
 @router.get("", response_model=ListResponse)
 async def list_jobs(
     request: Request,
@@ -54,9 +50,8 @@ async def list_jobs(
     page_size: int = Query(default=20, ge=1, le=100),
     status: str | None = Query(default=None),
     document_id: str | None = Query(default=None),
-    subject: dict = Depends(get_current_subject),
+    subject: dict = Depends(require_admin),
 ) -> ListResponse:
-    _require_admin(subject)
     if status and status not in JOB_STATUSES:
         raise AppError("VALIDATION_ERROR", "Invalid status", detail={"status": status}, status_code=422)
 
@@ -74,9 +69,8 @@ async def list_jobs(
     return _paginate(normalized, page=page, page_size=page_size)
 
 
-@router.get("/{job_id}")
-async def get_job(job_id: str, request: Request, subject: dict = Depends(get_current_subject)) -> dict:
-    _require_admin(subject)
+@router.get("/{job_id}", response_model=JobItem)
+async def get_job(job_id: str, request: Request, subject: dict = Depends(require_admin)) -> dict:
     service = request.app.state.document_service
     job = await service.get_job(job_id)
     log_event(
@@ -92,8 +86,7 @@ async def get_job(job_id: str, request: Request, subject: dict = Depends(get_cur
 
 
 @router.get("/{job_id}/stream")
-async def stream_job(job_id: str, request: Request, subject: dict = Depends(get_current_subject)) -> StreamingResponse:
-    _require_admin(subject)
+async def stream_job(job_id: str, request: Request, subject: dict = Depends(require_admin)) -> StreamingResponse:
     service = request.app.state.document_service
     job = _normalize_job(await service.get_job(job_id))
     request_id = getattr(request.state, "request_id", "")
@@ -172,9 +165,8 @@ async def stream_job(job_id: str, request: Request, subject: dict = Depends(get_
     return StreamingResponse(_event_stream(), media_type="text/event-stream")
 
 
-@router.post("/{job_id}/cancel", status_code=status.HTTP_202_ACCEPTED)
-async def cancel_job(job_id: str, request: Request, subject: dict = Depends(get_current_subject)) -> dict:
-    _require_admin(subject)
+@router.post("/{job_id}/cancel", status_code=status.HTTP_202_ACCEPTED, response_model=JobCancelAccepted)
+async def cancel_job(job_id: str, request: Request, subject: dict = Depends(require_admin)) -> dict:
     service = request.app.state.document_service
     result = await service.cancel_job(job_id)
     log_event(logger, "INFO", "documents.jobs.cancel.accepted", job_id=job_id, status=result.get("status"))

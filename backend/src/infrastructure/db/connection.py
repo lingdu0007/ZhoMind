@@ -1,7 +1,31 @@
+from __future__ import annotations
+
 from collections.abc import AsyncGenerator
 
-from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy import create_engine, text
+from sqlalchemy.engine import Engine
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
+from sqlalchemy.orm import DeclarativeBase, sessionmaker
+
+
+class Base(DeclarativeBase):
+    pass
+
+
+def build_engine(database_url: str) -> Engine:
+    if database_url.startswith("sqlite+aiosqlite://"):
+        database_url = database_url.replace("sqlite+aiosqlite://", "sqlite://", 1)
+    return create_engine(database_url, future=True)
+
+
+def build_session_factory(database_url: str) -> sessionmaker:
+    engine = build_engine(database_url)
+    return sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
 
 class Database:

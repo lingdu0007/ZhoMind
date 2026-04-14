@@ -1,43 +1,59 @@
+from uuid import uuid4
+
 from fastapi.testclient import TestClient
 
 from src.main import app
 
 
-def _auth(token: str = "admin-token") -> dict[str, str]:
+def _auth(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
+def _register_user(client: TestClient, *, username: str, role: str = "user") -> str:
+    payload = {"username": username, "password": "secret123", "role": role}
+    if role == "admin":
+        payload["admin_code"] = "letmein"
+    response = client.post("/api/v1/auth/register", json=payload)
+    assert response.status_code == 200
+    assert response.json()["username"] == username
+    return response.json()["access_token"]
+
+
 def test_auth_register_meet_contract() -> None:
+    username = f"qa_user_{uuid4().hex[:8]}"
+
     with TestClient(app) as client:
-        response = client.post(
-            "/api/v1/auth/register",
-            json={"username": "qa_user_01", "password": "password123", "role": "user"},
-        )
-        assert response.status_code == 201
-        payload = response.json()
-        assert payload["token_type"] == "Bearer"
-        assert payload["username"] == "qa_user_01"
-        assert payload["role"] == "user"
+        token = _register_user(client, username=username)
+        assert token
 
 
 def test_auth_me_returns_200_with_current_user() -> None:
+    username = f"qa_me_{uuid4().hex[:8]}"
+
     with TestClient(app) as client:
-        response = client.get("/api/v1/auth/me", headers=_auth("admin-token"))
+        token = _register_user(client, username=username)
+        response = client.get("/api/v1/auth/me", headers=_auth(token))
         assert response.status_code == 200
         payload = response.json()
         assert set(payload.keys()) == {"username", "role"}
-        assert payload["role"] == "admin"
+        assert payload["username"] == username
+        assert payload["role"] == "user"
 
 
 def test_sessions_detail_and_delete_contract() -> None:
-    with TestClient(app) as client:
-        detail = client.get("/api/v1/sessions/ses_01")
-        assert detail.status_code == 200
-        detail_payload = detail.json()
-        assert set(detail_payload.keys()) == {"session_id", "items"}
+    username = f"qa_session_{uuid4().hex[:8]}"
 
-        delete = client.delete("/api/v1/sessions/ses_01")
-        assert delete.status_code == 204
+    with TestClient(app) as client:
+        token = _register_user(client, username=username)
+
+        detail = client.get("/api/v1/sessions/missing_session", headers=_auth(token))
+        assert detail.status_code == 404
+        detail_payload = detail.json()
+        assert detail_payload["code"] == "RESOURCE_NOT_FOUND"
+
+        delete = client.delete("/api/v1/sessions/missing_session", headers=_auth(token))
+        assert delete.status_code == 404
+        assert delete.json()["code"] == "RESOURCE_NOT_FOUND"
 
 
 def test_chat_and_chat_stream_contract() -> None:

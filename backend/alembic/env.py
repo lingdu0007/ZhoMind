@@ -4,14 +4,21 @@ from logging.config import fileConfig
 
 from alembic import context
 from sqlalchemy import pool
+from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
-from src.infrastructure.db.models import Base
+from src.infrastructure.config.settings import get_settings
+from src.infrastructure.db.connection import Base
+from src.infrastructure.db import models  # noqa: F401
 
 config = context.config
+settings = get_settings()
+configured_url = config.get_main_option("sqlalchemy.url")
+if not configured_url or configured_url == "sqlite+aiosqlite:///./zhomind.db":
+    config.set_main_option("sqlalchemy.url", settings.database_url)
 
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 target_metadata = Base.metadata
 
@@ -29,7 +36,7 @@ def run_migrations_offline() -> None:
         context.run_migrations()
 
 
-def do_run_migrations(connection) -> None:
+def do_run_migrations(connection: Connection) -> None:
     context.configure(connection=connection, target_metadata=target_metadata, compare_type=True)
 
     with context.begin_transaction():

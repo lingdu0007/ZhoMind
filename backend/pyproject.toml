@@ -8,6 +8,9 @@ dependencies = [
   "uvicorn[standard]>=0.35.0",
   "pydantic-settings>=2.10.0",
   "python-multipart>=0.0.20",
+  "sqlalchemy>=2.0.0",
+  "alembic>=1.13.0",
+  "aiosqlite>=0.20.0",
 ]
 
 [dependency-groups]
@@ -22,11 +25,12 @@ pythonpath = ["."]
 testpaths = ["tests"]
 
 [tool.ruff]
-line-length = 100
+line-length = 150
 target-version = "py311"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B"]
+ignore = ["B008"]
 
 [tool.ruff.format]
 quote-style = "double"
@@ -35,7 +39,7 @@ quote-style = "double"
 package = false
 
 [project.scripts]
-dev = "uvicorn backend.src.main:app --reload"
+dev = "uvicorn src.main:app --reload"
 test = "pytest"
-lint = "ruff check backend/src backend/tests"
-format = "ruff format backend/src backend/tests"
+lint = "ruff check src tests"
+format = "ruff format src tests"

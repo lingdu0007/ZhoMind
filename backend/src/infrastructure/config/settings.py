@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     port: int = 8000
 
     database_url: str = Field(default="sqlite+aiosqlite:///./zhomind.db")
+    document_storage_dir: str = "./data/documents"
     queue_backend: str = "memory"
 
     milvus_host: str = "127.0.0.1"
@@ -52,6 +53,7 @@ class Settings(BaseSettings):
     embedding_model: str = "Qwen/Qwen3-Embedding-8B"
     rerank_model: str = "Qwen/Qwen3-Reranker-8B"
 
+    auth_admin_code: str = Field(default="letmein")
     auth_jwt_secret: str = Field(default="dev-secret-change-me")
     auth_jwt_algorithm: str = "HS256"
 

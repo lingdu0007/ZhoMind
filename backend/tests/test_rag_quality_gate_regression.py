@@ -1,16 +1,28 @@
+from uuid import uuid4
+
 from fastapi.testclient import TestClient
 
 from src.main import app
 
 
-def _headers() -> dict[str, str]:
-    return {"Authorization": "Bearer admin-token"}
+def _register_admin(client: TestClient) -> str:
+    username = f"rag_admin_{uuid4().hex[:8]}"
+    response = client.post(
+        "/api/v1/auth/register",
+        json={"username": username, "password": "secret123", "role": "admin", "admin_code": "letmein"},
+    )
+    assert response.status_code == 200
+    return response.json()["access_token"]
 
 
-def _seed_ready_doc(client: TestClient, text: bytes, filename: str = "seed.txt") -> tuple[str, str]:
+def _headers(token: str) -> dict[str, str]:
+    return {"Authorization": f"Bearer {token}"}
+
+
+def _seed_ready_doc(client: TestClient, token: str, text: bytes, filename: str = "seed.txt") -> tuple[str, str]:
     upload = client.post(
         "/api/v1/documents/upload",
-        headers=_headers(),
+        headers=_headers(token),
         files={"file": (filename, text, "text/plain")},
     )
     assert upload.status_code == 202
@@ -18,9 +30,9 @@ def _seed_ready_doc(client: TestClient, text: bytes, filename: str = "seed.txt")
     return payload["job_id"], payload["document_id"]
 
 
-def _wait_job(client: TestClient, job_id: str) -> dict:
+def _wait_job(client: TestClient, token: str, job_id: str) -> dict:
     for _ in range(60):
-        resp = client.get(f"/api/v1/documents/jobs/{job_id}", headers=_headers())
+        resp = client.get(f"/api/v1/documents/jobs/{job_id}", headers=_headers(token))
         assert resp.status_code == 200
         data = resp.json()
         if data["status"] in {"succeeded", "failed", "canceled"}:
@@ -30,8 +42,9 @@ def _wait_job(client: TestClient, job_id: str) -> dict:
 
 def test_rag_quality_gate_positive_hit() -> None:
     with TestClient(app) as client:
-        job_id, _ = _seed_ready_doc(client, b"milvus vector recall and bm25 hybrid retrieval")
-        final = _wait_job(client, job_id)
+        token = _register_admin(client)
+        job_id, _ = _seed_ready_doc(client, token, b"milvus vector recall and bm25 hybrid retrieval")
+        final = _wait_job(client, token, job_id)
         assert final["status"] == "succeeded"
 
         resp = client.post("/api/v1/chat", json={"message": "hybrid retrieval"})
@@ -45,8 +58,9 @@ def test_rag_quality_gate_positive_hit() -> None:
 
 def test_rag_quality_gate_rejects_irrelevant_queries() -> None:
     with TestClient(app) as client:
-        job_id, _ = _seed_ready_doc(client, b"python async worker queue state machine")
-        final = _wait_job(client, job_id)
+        token = _register_admin(client)
+        job_id, _ = _seed_ready_doc(client, token, b"python async worker queue state machine")
+        final = _wait_job(client, token, job_id)
         assert final["status"] == "succeeded"
 
         irrelevant_queries = [
@@ -67,8 +81,9 @@ def test_rag_quality_gate_rejects_irrelevant_queries() -> None:
 
 def test_rag_quality_gate_mid_band_fallback_allows_lexical_hit() -> None:
     with TestClient(app) as client:
-        job_id, _ = _seed_ready_doc(client, b"deterministic lexical fallback phrase alpha beta")
-        final = _wait_job(client, job_id)
+        token = _register_admin(client)
+        job_id, _ = _seed_ready_doc(client, token, b"deterministic lexical fallback phrase alpha beta")
+        final = _wait_job(client, token, job_id)
         assert final["status"] == "succeeded"
 
         resp = client.post("/api/v1/chat", json={"message": "lexical fallback phrase"})
@@ -82,8 +97,9 @@ def test_rag_quality_gate_mid_band_fallback_allows_lexical_hit() -> None:
 
 def test_rag_quality_gate_stream_consistent_with_chat() -> None:
     with TestClient(app) as client:
-        job_id, _ = _seed_ready_doc(client, b"hybrid stream consistency check")
-        final = _wait_job(client, job_id)
+        token = _register_admin(client)
+        job_id, _ = _seed_ready_doc(client, token, b"hybrid stream consistency check")
+        final = _wait_job(client, token, job_id)
         assert final["status"] == "succeeded"
 
         with client.stream("POST", "/api/v1/chat/stream", json={"message": "noise gibberish qwerty"}) as resp:

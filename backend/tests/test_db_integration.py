@@ -1,14 +1,16 @@
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 from pathlib import Path
 
-from alembic import command
 from alembic.config import Config
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from src.infrastructure.db.models import DocumentJobModel, DocumentModel, MessageModel, SessionModel, UserModel
+from alembic import command
+from src.domain.enums import JobStatus
+from src.infrastructure.db.models import DocumentModel, IngestionJobModel, UserModel
 from src.infrastructure.db.repositories import (
     DocumentJobRepository,
     MessageRepository,
@@ -38,21 +40,20 @@ def test_db_migration_and_repository_crud(tmp_path: Path) -> None:
             tables_result = await session.execute(
                 text(
                     "SELECT name FROM sqlite_master WHERE type='table' "
-                    "AND name IN ('users','sessions','messages','documents','document_jobs','document_chunks','bm25_postings')"
+                    "AND name IN ('users','chat_sessions','chat_messages','documents','ingestion_jobs','document_chunks')"
                 )
             )
             tables = {name for (name,) in tables_result.all()}
             assert tables == {
                 "users",
-                "sessions",
-                "messages",
+                "chat_sessions",
+                "chat_messages",
                 "documents",
-                "document_jobs",
+                "ingestion_jobs",
                 "document_chunks",
-                "bm25_postings",
             }
 
-            user = UserModel(username="u1", password_hash="hash", role="user")
+            user = UserModel(id="user_001", username="u1", password_hash="hash", role="user")
             session.add(user)
             await session.flush()
 
@@ -61,50 +62,40 @@ def test_db_migration_and_repository_crud(tmp_path: Path) -> None:
             job_repo = DocumentJobRepository(session)
 
             created_session = await session_repo.create_session(user_id=user.id, title="t1")
-            assert created_session["session_id"].startswith("ses_")
-            assert created_session["message_count"] == 0
+            assert created_session.id.startswith("session_")
+            assert created_session.message_count == 0
 
-            created_message = await message_repo.create_message(
-                session_id=created_session["session_id"],
+            created_message = await message_repo.add_message(
+                session_id=created_session.id,
                 role="user",
                 content="hello",
-                rag_trace={"trace": 1},
+                rag_trace_json={"trace": 1},
             )
-            assert created_message["message_id"].startswith("msg_")
-            assert created_message["role"] == "user"
+            assert created_message.id.startswith("message_")
+            assert created_message.role == "user"
 
-            queried_session = await session_repo.get_session(created_session["session_id"])
+            queried_session = await session_repo.get_session(session_id=created_session.id)
             assert queried_session is not None
-            assert queried_session["message_count"] == 1
+            assert queried_session.message_count == 1
 
             document = DocumentModel(
-                document_id="doc_001",
+                id="doc_001",
                 filename="demo.txt",
-                file_type="text/plain",
-                file_size=5,
-                status="pending",
+                status="uploaded",
                 chunk_strategy="general",
+                chunk_count=0,
             )
             session.add(document)
+            await session.flush()
 
-            job = DocumentJobModel(
-                job_id="job_001",
-                document_id="doc_001",
-                status="queued",
-                stage="uploaded",
-                progress=0,
-            )
-            session.add(job)
+            job = await job_repo.create_job(document_id=document.id, stage="uploaded")
+            assert job.id.startswith("job_")
+            assert job.status == "queued"
             await session.commit()
 
-            jobs, total = await job_repo.list_jobs(page=1, page_size=20, status="queued")
-            assert total == 1
-            assert jobs[0]["job_id"] == "job_001"
-            assert jobs[0]["status"] == "queued"
-
-            updated = await job_repo.update_job_status(
-                job_id="job_001",
-                status="running",
+            updated = await job_repo.update_job(
+                job_id=job.id,
+                status=JobStatus.RUNNING,
                 stage="parsing",
                 progress=25,
                 message="Parsing document",
@@ -112,32 +103,32 @@ def test_db_migration_and_repository_crud(tmp_path: Path) -> None:
             assert updated is True
             await session.commit()
 
-            fetched_job = await job_repo.get_job("job_001")
+            fetched_job = await job_repo.get_job(job_id=job.id)
             assert fetched_job is not None
-            assert fetched_job["status"] == "running"
-            assert fetched_job["stage"] == "parsing"
-            assert fetched_job["progress"] == 25
+            assert fetched_job.status == "running"
+            assert fetched_job.stage == "parsing"
+            assert fetched_job.progress == 25
 
-            finished = datetime.now(UTC)
-            updated = await job_repo.update_job_status(
-                job_id="job_001",
-                status="succeeded",
+            updated = await job_repo.update_job(
+                job_id=job.id,
+                status=JobStatus.SUCCEEDED,
                 stage="completed",
                 progress=100,
                 message="done",
-                finished_at=finished,
             )
             assert updated is True
             await session.commit()
 
-            fetched_job = await job_repo.get_job("job_001")
+            fetched_job = await job_repo.get_job(job_id=job.id)
             assert fetched_job is not None
-            assert fetched_job["status"] == "succeeded"
-            assert fetched_job["stage"] == "completed"
-            assert fetched_job["progress"] == 100
-            assert fetched_job["finished_at"] is not None
+            assert fetched_job.status == "succeeded"
+            assert fetched_job.stage == "completed"
+            assert fetched_job.progress == 100
 
-            deleted = await session_repo.delete_session(created_session["session_id"])
+            deleted = await session_repo.delete_session_for_user(
+                user_id=user.id,
+                session_id=created_session.id,
+            )
             assert deleted is True
             await session.commit()
 
@@ -158,22 +149,21 @@ def test_job_enum_drift_protection_by_db_constraints(tmp_path: Path) -> None:
         session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
         async with session_factory() as session:
-            session.add(UserModel(username="u2", password_hash="hash", role="user"))
+            session.add(UserModel(id="user_002", username="u2", password_hash="hash", role="user"))
             session.add(
                 DocumentModel(
-                    document_id="doc_002",
+                    id="doc_002",
                     filename="enum.txt",
-                    file_type="text/plain",
-                    file_size=1,
-                    status="pending",
+                    status="uploaded",
                     chunk_strategy="general",
+                    chunk_count=0,
                 )
             )
             await session.commit()
 
             session.add(
-                DocumentJobModel(
-                    job_id="job_bad",
+                IngestionJobModel(
+                    id="job_bad",
                     document_id="doc_002",
                     status="bad_status",
                     stage="uploaded",
@@ -207,15 +197,14 @@ def test_retrieval_repository_persistence_and_sync(tmp_path: Path) -> None:
         session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
         async with session_factory() as session:
-            session.add(UserModel(username="u3", password_hash="hash", role="user"))
+            session.add(UserModel(id="user_003", username="u3", password_hash="hash", role="user"))
             session.add(
                 DocumentModel(
-                    document_id="doc_003",
+                    id="doc_003",
                     filename="retrieval.txt",
-                    file_type="text/plain",
-                    file_size=42,
-                    status="processing",
+                    status="uploaded",
                     chunk_strategy="general",
+                    chunk_count=0,
                 )
             )
             await session.commit()
@@ -248,18 +237,24 @@ def test_retrieval_repository_persistence_and_sync(tmp_path: Path) -> None:
             assert listed[0]["chunk_index"] == 0
             assert listed[1]["chunk_index"] == 1
 
-            marked = await repo.mark_chunks_index_status(chunk_ids, index_status="indexed", indexed_at=datetime.now(UTC))
+            marked = await repo.mark_chunks_index_status(
+                chunk_ids,
+                index_status="indexed",
+                indexed_at=datetime.now(UTC),
+            )
             assert marked == 2
             await session.commit()
 
-            posting_count = await session.scalar(
-                text("SELECT count(*) FROM bm25_postings WHERE document_id = 'doc_003' AND version = 2")
+            indexed_rows = await session.execute(
+                text("SELECT metadata_json FROM document_chunks WHERE document_id = 'doc_003'")
             )
-            assert int(posting_count or 0) > 0
+            metadata_rows = [json.loads(row[0]) for row in indexed_rows.all()]
+            assert all(item is not None for item in metadata_rows)
+            assert all(item["index_status"] == "indexed" for item in metadata_rows)
 
             cleanup = await repo.delete_document_retrieval_data(document_id="doc_003")
             assert cleanup["chunks_deleted"] == 2
-            assert cleanup["bm25_deleted"] > 0
+            assert cleanup["bm25_deleted"] == 0
             await session.commit()
 
         await engine.dispose()

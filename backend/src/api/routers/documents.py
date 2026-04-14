@@ -1,26 +1,18 @@
 from fastapi import APIRouter, Depends, File, Query, Request, UploadFile, status
-from pydantic import BaseModel, Field
 
-from src.api.dependencies import get_current_subject
+from src.api.dependencies import require_admin
 from src.application.document_service import CHUNK_STRATEGIES
 from src.shared.exceptions import AppError
 from src.shared.schemas import ListResponse, PaginationMeta
+from src.shared.schemas.documents import (
+    DocumentBatchBuildRequest,
+    DocumentBatchDeleteRequest,
+    DocumentBuildRequest,
+    DocumentUploadAccepted,
+)
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 DOCUMENT_STATUSES = {"pending", "processing", "ready", "failed", "deleting"}
-
-
-class DocumentBuildRequest(BaseModel):
-    chunk_strategy: str
-
-
-class DocumentBatchBuildRequest(BaseModel):
-    document_ids: list[str] = Field(min_length=1)
-    chunk_strategy: str
-
-
-class DocumentBatchDeleteRequest(BaseModel):
-    document_ids: list[str] = Field(min_length=1)
 
 
 def _paginate(items: list[dict], page: int, page_size: int) -> ListResponse:
@@ -32,11 +24,6 @@ def _paginate(items: list[dict], page: int, page_size: int) -> ListResponse:
     )
 
 
-def _require_admin(subject: dict) -> None:
-    if subject.get("role") != "admin":
-        raise AppError("AUTH_FORBIDDEN", "Forbidden", status_code=403)
-
-
 @router.get("", response_model=ListResponse)
 async def list_documents(
     request: Request,
@@ -45,10 +32,9 @@ async def list_documents(
     keyword: str | None = Query(default=None),
     sort: str | None = Query(default=None),
     status: str | None = Query(default=None),
-    subject: dict = Depends(get_current_subject),
+    subject: dict = Depends(require_admin),
 ) -> ListResponse:
     _ = keyword, sort
-    _require_admin(subject)
     if status and status not in DOCUMENT_STATUSES:
         raise AppError("VALIDATION_ERROR", "Invalid status", detail={"status": status}, status_code=422)
 
@@ -57,13 +43,12 @@ async def list_documents(
     return _paginate(items, page=page, page_size=page_size)
 
 
-@router.post("/upload", status_code=status.HTTP_202_ACCEPTED)
+@router.post("/upload", status_code=status.HTTP_202_ACCEPTED, response_model=DocumentUploadAccepted)
 async def upload_document(
     request: Request,
     file: UploadFile = File(...),
-    subject: dict = Depends(get_current_subject),
+    subject: dict = Depends(require_admin),
 ) -> dict:
-    _require_admin(subject)
     service = request.app.state.document_service
     content = await file.read()
     return await service.create_upload_job(
@@ -78,9 +63,8 @@ async def build_document(
     document_id: str,
     payload: DocumentBuildRequest,
     request: Request,
-    subject: dict = Depends(get_current_subject),
+    subject: dict = Depends(require_admin),
 ) -> dict:
-    _require_admin(subject)
     service = request.app.state.document_service
     return await service.create_build_job(document_id=document_id, chunk_strategy=payload.chunk_strategy)
 
@@ -89,9 +73,8 @@ async def build_document(
 async def batch_build(
     payload: DocumentBatchBuildRequest,
     request: Request,
-    subject: dict = Depends(get_current_subject),
+    subject: dict = Depends(require_admin),
 ) -> dict:
-    _require_admin(subject)
     if payload.chunk_strategy not in CHUNK_STRATEGIES:
         raise AppError("DOC_INVALID_CHUNK_STRATEGY", "Invalid chunk strategy", status_code=422)
 
@@ -124,9 +107,8 @@ async def batch_build(
 async def batch_delete(
     payload: DocumentBatchDeleteRequest,
     request: Request,
-    subject: dict = Depends(get_current_subject),
+    subject: dict = Depends(require_admin),
 ) -> dict:
-    _require_admin(subject)
     service = request.app.state.document_service
     return await service.batch_delete(payload.document_ids)
 
@@ -137,9 +119,8 @@ async def list_document_chunks(
     request: Request,
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
-    subject: dict = Depends(get_current_subject),
+    subject: dict = Depends(require_admin),
 ) -> ListResponse:
-    _require_admin(subject)
     service = request.app.state.document_service
     items = await service.list_chunks(document_id)
     return _paginate(items, page=page, page_size=page_size)
@@ -149,9 +130,8 @@ async def list_document_chunks(
 async def delete_document_by_filename(
     filename: str,
     request: Request,
-    subject: dict = Depends(get_current_subject),
+    subject: dict = Depends(require_admin),
 ) -> None:
-    _require_admin(subject)
     service = request.app.state.document_service
     docs = await service.list_documents(status=None)
     target = next((doc for doc in docs if doc["filename"] == filename), None)

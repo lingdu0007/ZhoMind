@@ -70,6 +70,7 @@ chroma/
 qdrant/
 tmp/
 temp/
+backend/data/
 
 # =========================
 # Local tooling / workspace artifacts

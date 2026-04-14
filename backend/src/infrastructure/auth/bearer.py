@@ -2,6 +2,7 @@ import logging
 
 from fastapi import Header
 
+from src.application.auth.service import AuthService
 from src.infrastructure.logging.observability import log_event, redact_headers
 from src.shared.exceptions import AuthError
 
@@ -34,10 +35,7 @@ async def parse_bearer_token(authorization: str | None = Header(default=None)) -
     return parts[1].strip()
 
 
-async def permission_hook(token: str) -> dict:
-    if token == "admin-token":
-        subject = {"token": token, "role": "admin", "username": "admin"}
-    else:
-        subject = {"token": token, "role": "user", "username": "user"}
+def decode_bearer_subject(token: str, service: AuthService) -> dict[str, str]:
+    subject = service.decode_access_token(token)
     log_event(logger, "DEBUG", "auth.subject.resolved", user_id=subject["username"], role=subject["role"])
     return subject
