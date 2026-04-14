@@ -36,10 +36,16 @@
         placeholder="请输入问题，系统将执行 Agentic RAG 工作流"
       />
       <div class="composer-actions">
-        <el-button class="btn-ghost" :disabled="!chatStore.loading" @click="chatStore.stopStreaming">停止</el-button>
-        <el-button type="primary" :loading="chatStore.loading" :disabled="!authStore.isLoggedIn" @click="onSend">
-          发送
-        </el-button>
+        <el-radio-group v-model="sendMode" size="small">
+          <el-radio-button label="sync">普通</el-radio-button>
+          <el-radio-button label="stream">流式</el-radio-button>
+        </el-radio-group>
+        <div class="composer-actions-right">
+          <el-button class="btn-ghost" :disabled="!chatStore.loading" @click="chatStore.stopStreaming">停止</el-button>
+          <el-button type="primary" :loading="chatStore.loading" :disabled="!authStore.isLoggedIn" @click="onSend">
+            发送
+          </el-button>
+        </div>
       </div>
     </div>
 
@@ -88,6 +94,7 @@ import { useAuthStore } from '../store/auth';
 const chatStore = useChatStore();
 const authStore = useAuthStore();
 const input = ref('');
+const sendMode = ref('sync');
 const chatSectionRef = ref(null);
 const sessionVisible = ref(false);
 
@@ -196,6 +203,10 @@ const onSend = async () => {
   }
   const question = input.value;
   input.value = '';
+  if (sendMode.value === 'sync') {
+    await chatStore.sendMessageSync(question);
+    return;
+  }
   await chatStore.sendMessage(question);
 };
 
@@ -241,6 +252,13 @@ onMounted(async () => {
 }
 
 .composer-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.composer-actions-right {
   display: flex;
   justify-content: flex-end;
   gap: 12px;

@@ -53,12 +53,18 @@ export const useAuthStore = defineStore('auth', {
       }
     },
     async refreshMe() {
-      if (!this.token) return;
-      const data = await apiAdapter.getCurrentUser();
-      this.username = data?.username || this.username;
-      this.role = data?.role || this.role;
-      localStorage.setItem('username', this.username);
-      localStorage.setItem('role', this.role);
+      if (!this.token) return null;
+      try {
+        const data = await apiAdapter.getCurrentUser();
+        this.username = data?.username || this.username;
+        this.role = data?.role || this.role;
+        localStorage.setItem('username', this.username);
+        localStorage.setItem('role', this.role);
+        return data;
+      } catch (error) {
+        this.clearAuth();
+        throw error;
+      }
     }
   }
 });

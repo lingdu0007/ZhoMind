@@ -14,16 +14,16 @@
       <div class="session-items">
         <div
           v-for="item in sessions"
-          :key="item.session_id || item.id"
+          :key="item.session_id"
           class="session-row"
-          :class="{ active: (item.session_id || item.id) === activeId }"
-          @click="$emit('select', item.session_id || item.id)"
+          :class="{ active: item.session_id === activeId }"
+          @click="$emit('select', item.session_id)"
         >
           <div class="session-meta">
-            <p>{{ item.session_id || item.id }}</p>
+            <p>{{ item.title || item.session_id }}</p>
             <small>{{ item.updated_at || '--' }} · {{ item.message_count ?? 0 }} 条</small>
           </div>
-          <el-button link type="danger" @click.stop="$emit('remove', item.session_id || item.id)">删除</el-button>
+          <el-button link type="danger" @click.stop="$emit('remove', item.session_id)">删除</el-button>
         </div>
       </div>
     </div>

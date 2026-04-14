@@ -95,7 +95,18 @@ export const streamChat = async ({ message, session_id, signal }, handlers = {})
   });
 
   if (!response.ok || !response.body) {
-    throw new Error(`流式请求失败: ${response.status}`);
+    let errorPayload = null;
+    try {
+      errorPayload = await response.json();
+    } catch {
+      errorPayload = null;
+    }
+
+    const error = new Error(errorPayload?.message || `流式请求失败: ${response.status}`);
+    error.status = response.status;
+    error.code = errorPayload?.code || '';
+    error.detail = errorPayload?.detail;
+    throw error;
   }
 
   const reader = response.body.getReader();
@@ -104,6 +115,18 @@ export const streamChat = async ({ message, session_id, signal }, handlers = {})
 
   const dispatch = (event) => {
     if (!event) return;
+
+    const metaEvent =
+      event.type === 'meta'
+        ? event
+        : event.type === 'unknown' && event.data && typeof event.data === 'object'
+          ? event.data
+          : null;
+
+    if (metaEvent && (metaEvent.session_id || metaEvent.message_id || metaEvent.request_id)) {
+      handlers.onMeta?.(metaEvent);
+      return;
+    }
 
     if (event.type === 'done') {
       doneDispatched = true;

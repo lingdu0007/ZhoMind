@@ -23,24 +23,18 @@ export const useChatStore = defineStore('chat', {
   actions: {
     async loadSessions() {
       const data = await apiAdapter.listSessions();
-      this.sessions = data?.sessions || data?.items || data?.data || [];
+      this.sessions = data?.items || [];
       if (!this.activeSessionId && this.sessions.length > 0) {
-        const preferred =
-          this.sessions.find((item) => (item.session_id || item.id) !== 'default_session') ||
-          this.sessions[0];
-        const candidate = preferred.session_id || preferred.id || '';
-        if (candidate && candidate !== 'default_session') {
-          this.activeSessionId = candidate;
-        }
+        this.activeSessionId = this.sessions[0]?.session_id || '';
       }
     },
     async loadSessionMessages(sessionId) {
       if (!sessionId) return;
       const data = await apiAdapter.getSessionMessages(sessionId);
       this.activeSessionId = sessionId;
-      const rawMessages = data?.messages || data?.items || data?.data || [];
+      const rawMessages = data?.messages || [];
       this.messages = rawMessages.map((item) => ({
-        role: item?.type === 'user' ? 'user' : 'assistant',
+        role: item?.role || 'assistant',
         content: item?.content || '',
         timestamp: item?.timestamp,
         rag_trace: item?.rag_trace || null,
@@ -65,12 +59,55 @@ export const useChatStore = defineStore('chat', {
         this.streamController.abort();
       }
     },
+    async sendMessageSync(question) {
+      if (!question?.trim() || this.loading) return;
+
+      this.messages.push({ role: 'user', content: question });
+      this.loading = true;
+
+      try {
+        const data = await apiAdapter.chat({
+          message: question,
+          session_id: this.activeSessionId || undefined
+        });
+
+        this.activeSessionId = data?.session_id || this.activeSessionId;
+        const message = data?.message || {};
+        const rejected = message?.rag_trace?.metrics?.gate_passed === false;
+        this.messages.push({
+          role: message.role || 'assistant',
+          content: message.content || '',
+          timestamp: message.timestamp,
+          rag_trace: message.rag_trace || null,
+          rag_steps: [],
+          streaming: false,
+          isThinking: false,
+          rejected,
+          reject_reason: rejected ? message?.rag_trace?.metrics?.gate_reason || '' : '',
+          status: rejected ? getDoneStatus({ rejected: true }) : ''
+        });
+      } catch (error) {
+        this.messages.push({
+          role: 'assistant',
+          content: `请求失败：${formatStreamError(error)}`,
+          timestamp: undefined,
+          rag_trace: null,
+          rag_steps: [],
+          streaming: false,
+          isThinking: false,
+          rejected: false,
+          reject_reason: '',
+          status: '生成失败'
+        });
+      } finally {
+        this.loading = false;
+        await this.loadSessions();
+      }
+    },
     async sendMessage(question) {
       if (!question?.trim() || this.loading) return;
 
-      if (!this.activeSessionId || this.activeSessionId === 'default_session') {
-        this.activeSessionId = `session_${Date.now()}`;
-      }
+      const requestSessionId = this.activeSessionId || undefined;
 
       this.messages.push({ role: 'user', content: question });
       const assistantIndex = this.messages.length;
@@ -87,6 +124,17 @@ export const useChatStore = defineStore('chat', {
       });
 
       const getAssistantMsg = () => this.messages[assistantIndex];
+      const finalizeAssistantStatus = (assistantMsg) => {
+        const finalStatus = getDoneStatus(assistantMsg);
+        if (finalStatus) {
+          assistantMsg.status = finalStatus;
+          return;
+        }
+
+        if (['思考中...', '生成中...', '证据不足，进入拒答'].includes(assistantMsg.status)) {
+          assistantMsg.status = '';
+        }
+      };
 
       this.loading = true;
       this.streamController = new AbortController();
@@ -95,10 +143,16 @@ export const useChatStore = defineStore('chat', {
         await streamChat(
           {
             message: question,
-            session_id: this.activeSessionId || undefined,
+            session_id: requestSessionId,
             signal: this.streamController.signal
           },
           {
+            onMeta: (meta) => {
+              const sessionId = meta?.session_id || meta?.data?.session_id || '';
+              if (sessionId) {
+                this.activeSessionId = sessionId;
+              }
+            },
             onContent: (chunk) => {
               const assistantMsg = getAssistantMsg();
               if (!assistantMsg) return;
@@ -144,7 +198,7 @@ export const useChatStore = defineStore('chat', {
               if (assistantMsg.rejected && !assistantMsg.content) {
                 assistantMsg.content = '未检索到足够相关的知识片段，请补充更具体的问题或关键词。';
               }
-              assistantMsg.status = getDoneStatus(assistantMsg);
+              finalizeAssistantStatus(assistantMsg);
               this.streamTick += 1;
             }
           }
