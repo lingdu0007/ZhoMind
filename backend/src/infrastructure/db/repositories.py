@@ -1,15 +1,26 @@
+from collections import Counter
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from uuid import uuid4
 
-from sqlalchemy import and_, desc, func, select, update
+from sqlalchemy import and_, delete, desc, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.infrastructure.db.models import DocumentJobModel, MessageModel, SessionModel
+from src.infrastructure.db.models import (
+    Bm25PostingModel,
+    DocumentChunkModel,
+    DocumentJobModel,
+    MessageModel,
+    SessionModel,
+)
 
 
 def _iso(value: datetime | None) -> str | None:
     return value.astimezone(UTC).isoformat().replace("+00:00", "Z") if value else None
+
+
+def _tokenize(text: str) -> list[str]:
+    return [token.strip().lower() for token in text.split() if token.strip()]
 
 
 @dataclass
@@ -174,7 +185,7 @@ class DocumentJobRepository:
                 finished_at=finished_at,
             )
         )
-        return result.rowcount > 0
+        return bool(result.rowcount and result.rowcount > 0)
 
     def _to_dict(self, row: DocumentJobModel) -> dict:
         return {
@@ -189,3 +200,118 @@ class DocumentJobRepository:
             "updated_at": _iso(row.updated_at),
             "finished_at": _iso(row.finished_at),
         }
+
+
+@dataclass
+class RetrievalRepository:
+    session: AsyncSession
+
+    async def replace_document_chunks(self, document_id: str, chunks: list[dict], version: int) -> list[str]:
+        await self.session.execute(
+            delete(Bm25PostingModel).where(
+                and_(Bm25PostingModel.document_id == document_id, Bm25PostingModel.version == version)
+            )
+        )
+        await self.session.execute(
+            delete(DocumentChunkModel).where(
+                and_(DocumentChunkModel.document_id == document_id, DocumentChunkModel.version == version)
+            )
+        )
+
+        chunk_ids: list[str] = []
+        for item in chunks:
+            chunk_id = item.get("chunk_id") or f"chk_{uuid4().hex[:12]}"
+            retrieval_text = item.get("retrieval_text") or self._build_retrieval_text(item)
+            model = DocumentChunkModel(
+                chunk_id=chunk_id,
+                document_id=document_id,
+                chunk_index=item["chunk_index"],
+                content=item["content"],
+                keywords=item.get("keywords", []),
+                generated_questions=item.get("generated_questions", []),
+                chunk_metadata=item.get("metadata"),
+                retrieval_text=retrieval_text,
+                tokens=_tokenize(retrieval_text),
+                version=version,
+                index_status="pending",
+            )
+            self.session.add(model)
+            chunk_ids.append(chunk_id)
+
+            term_counts = Counter(_tokenize(retrieval_text))
+            doc_len = sum(term_counts.values()) or 1
+            for term, tf in term_counts.items():
+                posting = Bm25PostingModel(
+                    chunk_id=chunk_id,
+                    document_id=document_id,
+                    term=term[:128],
+                    tf=tf,
+                    doc_len=doc_len,
+                    version=version,
+                )
+                self.session.add(posting)
+
+        await self.session.flush()
+        return chunk_ids
+
+    async def mark_chunks_index_status(
+        self,
+        chunk_ids: list[str],
+        index_status: str,
+        indexed_at: datetime | None = None,
+    ) -> int:
+        values = {"index_status": index_status, "updated_at": datetime.now(UTC)}
+        if indexed_at is not None:
+            values["indexed_at"] = indexed_at
+
+        result = await self.session.execute(
+            update(DocumentChunkModel).where(DocumentChunkModel.chunk_id.in_(chunk_ids)).values(**values)
+        )
+        return int(result.rowcount or 0)
+
+    async def list_chunks_for_index(self, document_id: str, version: int) -> list[dict]:
+        rows = (
+            await self.session.execute(
+                select(DocumentChunkModel)
+                .where(
+                    and_(
+                        DocumentChunkModel.document_id == document_id,
+                        DocumentChunkModel.version == version,
+                    )
+                )
+                .order_by(DocumentChunkModel.chunk_index.asc())
+            )
+        ).scalars().all()
+
+        items: list[dict] = []
+        for row in rows:
+            items.append(
+                {
+                    "chunk_id": row.chunk_id,
+                    "document_id": row.document_id,
+                    "chunk_index": row.chunk_index,
+                    "content": row.content,
+                    "retrieval_text": row.retrieval_text,
+                    "version": row.version,
+                }
+            )
+        return items
+
+    async def delete_document_retrieval_data(self, document_id: str) -> dict:
+        postings = await self.session.execute(
+            delete(Bm25PostingModel).where(Bm25PostingModel.document_id == document_id)
+        )
+        chunks = await self.session.execute(
+            delete(DocumentChunkModel).where(DocumentChunkModel.document_id == document_id)
+        )
+        return {
+            "bm25_deleted": int(postings.rowcount or 0),
+            "chunks_deleted": int(chunks.rowcount or 0),
+        }
+
+    @staticmethod
+    def _build_retrieval_text(item: dict) -> str:
+        parts: list[str] = [item.get("content", "")]
+        parts.extend(item.get("keywords", []))
+        parts.extend(item.get("generated_questions", []))
+        return " ".join(part for part in parts if part).strip()

@@ -17,7 +17,7 @@ export default defineConfig({
     proxy: {
       '/api': {
         ...proxyOptions,
-        rewrite: (path) => path.replace(/^\/api/, ''),
+        rewrite: (path) => path.replace(/^\/api/, '/api/v1'),
         configure: (proxy) => {
           proxy.on('proxyRes', (proxyRes, req) => {
             if (req.url?.startsWith('/api/chat/stream')) {

@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import BIGINT, CheckConstraint, DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.dialects.sqlite import JSON
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -61,7 +61,7 @@ class DocumentModel(Base):
     document_id: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     filename: Mapped[str] = mapped_column(String(512), index=True)
     file_type: Mapped[str] = mapped_column(String(128))
-    file_size: Mapped[int] = mapped_column()
+    file_size: Mapped[int] = mapped_column(BIGINT)
     status: Mapped[str] = mapped_column(String(16), default="pending", index=True)
     chunk_strategy: Mapped[str] = mapped_column(String(16), default="general")
     chunk_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -115,4 +115,58 @@ class DocumentJobModel(Base):
             "stage IN ('uploaded','parsing','chunking','embedding','indexing','completed','failed')",
             name="ck_document_jobs_stage",
         ),
+    )
+
+
+class DocumentChunkModel(Base):
+    __tablename__ = "document_chunks"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    chunk_id: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    document_id: Mapped[str] = mapped_column(
+        ForeignKey("documents.document_id", ondelete="CASCADE"), index=True
+    )
+    chunk_index: Mapped[int] = mapped_column(Integer)
+    content: Mapped[str] = mapped_column(Text)
+    keywords: Mapped[list[str]] = mapped_column(JSON, default=list)
+    generated_questions: Mapped[list[str]] = mapped_column(JSON, default=list)
+    chunk_metadata: Mapped[dict | None] = mapped_column("metadata", JSON, nullable=True)
+    retrieval_text: Mapped[str] = mapped_column(Text)
+    tokens: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    version: Mapped[int] = mapped_column(Integer, default=1, index=True)
+    index_status: Mapped[str] = mapped_column(String(16), default="pending", index=True)
+    indexed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    __table_args__ = (
+        CheckConstraint("chunk_index >= 0", name="ck_document_chunks_chunk_index"),
+        CheckConstraint("version >= 1", name="ck_document_chunks_version"),
+        CheckConstraint(
+            "index_status IN ('pending','indexing','indexed','failed')",
+            name="ck_document_chunks_index_status",
+        ),
+    )
+
+
+class Bm25PostingModel(Base):
+    __tablename__ = "bm25_postings"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    chunk_id: Mapped[str] = mapped_column(
+        ForeignKey("document_chunks.chunk_id", ondelete="CASCADE"), index=True
+    )
+    document_id: Mapped[str] = mapped_column(String(64), index=True)
+    term: Mapped[str] = mapped_column(String(128), index=True)
+    tf: Mapped[int] = mapped_column(Integer)
+    doc_len: Mapped[int] = mapped_column(Integer)
+    version: Mapped[int] = mapped_column(Integer, default=1, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        CheckConstraint("tf >= 1", name="ck_bm25_postings_tf"),
+        CheckConstraint("doc_len >= 1", name="ck_bm25_postings_doc_len"),
+        CheckConstraint("version >= 1", name="ck_bm25_postings_version"),
     )

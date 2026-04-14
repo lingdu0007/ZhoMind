@@ -7,6 +7,8 @@ from enum import Enum
 from typing import Any
 from uuid import uuid4
 
+from src.infrastructure.logging.observability import log_event
+from src.infrastructure.retrieval.tuning import RetrievalTuning
 from src.shared.exceptions import AppError
 from src.shared.request_context import document_id_ctx, job_id_ctx
 
@@ -65,8 +67,32 @@ class JobRecord:
 
 
 class DocumentService:
-    def __init__(self, queue_runner: Any) -> None:
+    def __init__(
+        self,
+        queue_runner: Any,
+        vector_store: Any | None = None,
+        bm25_store: Any | None = None,
+        index_sync_service: Any | None = None,
+        tuning: RetrievalTuning | None = None,
+    ) -> None:
         self._queue_runner = queue_runner
+        self._vector_store = vector_store
+        self._bm25_store = bm25_store
+        self._index_sync_service = index_sync_service
+        self._tuning = tuning or RetrievalTuning(
+            dense_weight=0.55,
+            sparse_weight=0.45,
+            bm25_min_term_match=1,
+            bm25_min_score=0.05,
+            dense_top_k=30,
+            sparse_top_k=30,
+            dense_rescue_enabled=True,
+            max_document_filter_count=20,
+            max_context_tokens=5000,
+            chunk_version_retention=2,
+            max_chunk_count_per_document=2000,
+            max_bm25_postings_per_document=50000,
+        )
         self._documents: dict[str, DocumentRecord] = {}
         self._jobs: dict[str, JobRecord] = {}
         self._chunks: dict[str, list[dict[str, Any]]] = {}
@@ -235,6 +261,47 @@ class DocumentService:
                 raise AppError("DOC_CHUNK_RESULT_NOT_READY", "Chunk result not ready", status_code=409)
             return list(self._chunks.get(document_id, []))
 
+    async def hybrid_retrieve(self, query: str, top_k: int = 5) -> list[dict[str, Any]]:
+        dense_rows = self._vector_store.query(query, top_k=self._tuning.dense_top_k) if self._vector_store else []
+        sparse_rows = self._bm25_store.query(query, top_k=self._tuning.sparse_top_k) if self._bm25_store else []
+
+        merged: dict[str, dict[str, Any]] = {}
+        for row in dense_rows:
+            merged[row["chunk_id"]] = {
+                "chunk_id": row["chunk_id"],
+                "document_id": row["document_id"],
+                "content": row.get("content", ""),
+                "dense_score": float(row.get("dense_score", 0.0)),
+                "sparse_score": 0.0,
+            }
+        for row in sparse_rows:
+            current = merged.get(row["chunk_id"])
+            if current is None:
+                current = {
+                    "chunk_id": row["chunk_id"],
+                    "document_id": row["document_id"],
+                    "content": row.get("content", ""),
+                    "dense_score": 0.0,
+                    "sparse_score": 0.0,
+                }
+                merged[row["chunk_id"]] = current
+            current["sparse_score"] = float(row.get("sparse_score", 0.0))
+
+        fused = []
+        for item in merged.values():
+            dense_score = max(0.0, min(1.0, item["dense_score"]))
+            sparse_score = max(0.0, min(1.0, item["sparse_score"]))
+            fused_score = (
+                dense_score * self._tuning.dense_weight
+                + sparse_score * self._tuning.sparse_weight
+            )
+            if self._tuning.dense_rescue_enabled and sparse_score >= self._tuning.bm25_min_score:
+                fused_score = max(fused_score, sparse_score * self._tuning.sparse_weight)
+            fused.append({**item, "score": round(fused_score, 6)})
+
+        fused.sort(key=lambda x: x["score"], reverse=True)
+        return fused[:top_k]
+
     async def batch_delete(self, document_ids: list[str]) -> dict[str, Any]:
         success_ids: list[str] = []
         failed_items: list[dict[str, str]] = []
@@ -257,6 +324,8 @@ class DocumentService:
                 doc.status = "deleting"
                 self._documents.pop(document_id, None)
                 self._chunks.pop(document_id, None)
+                if self._index_sync_service is not None:
+                    await self._index_sync_service.delete_document_index(document_id=document_id)
                 success_ids.append(document_id)
 
         return {"success_ids": success_ids, "failed_items": failed_items}
@@ -266,19 +335,32 @@ class DocumentService:
         await self._check_cancel(job_id)
 
         try:
+            log_event(logger, "INFO", "doc.pipeline.parsing.started", job_id=job_id)
             content = await self._parsing(job_id)
+            log_event(logger, "INFO", "doc.pipeline.parsing.completed", job_id=job_id)
             await self._check_cancel(job_id)
+
+            log_event(logger, "INFO", "doc.pipeline.chunking.started", job_id=job_id)
             chunks = await self._chunking(job_id, content)
+            log_event(logger, "INFO", "doc.pipeline.chunking.completed", job_id=job_id, chunk_count=len(chunks))
             await self._check_cancel(job_id)
+
+            log_event(logger, "INFO", "doc.pipeline.embedding.started", job_id=job_id)
             await self._embedding(job_id, chunks)
+            log_event(logger, "INFO", "doc.pipeline.embedding.completed", job_id=job_id)
             await self._check_cancel(job_id)
+
+            log_event(logger, "INFO", "doc.pipeline.indexing.started", job_id=job_id)
             await self._indexing(job_id, chunks)
+            log_event(logger, "INFO", "doc.pipeline.indexing.completed", job_id=job_id)
             await self._succeed(job_id, len(chunks))
         except AppError as exc:
             if exc.code == "DOC_JOB_STATE_CONFLICT":
                 return
+            log_event(logger, "ERROR", "doc.pipeline.failed", job_id=job_id, error_code=exc.code)
             await self._fail(job_id, exc.code, exc.message, detail=exc.detail)
         except Exception:
+            log_event(logger, "ERROR", "doc.pipeline.failed", job_id=job_id, error_code="INTERNAL_ERROR")
             await self._fail(job_id, "INTERNAL_ERROR", "Internal pipeline error", detail=None)
 
     async def _transition_running(self, job_id: str) -> None:
@@ -339,20 +421,55 @@ class DocumentService:
                 raise AppError("DOC_PARSE_ERROR", "Document parse failed", status_code=500)
             return text
 
+    def _chunk_params(self, strategy: str) -> tuple[int, int]:
+        mapping = {
+            "padding": (180, 40),
+            "general": (320, 60),
+            "book": (500, 80),
+            "paper": (420, 70),
+            "resume": (220, 40),
+            "table": (260, 30),
+            "qa": (180, 20),
+        }
+        return mapping.get(strategy, (320, 60))
+
+    def _split_with_overlap(self, text: str, chunk_size: int, overlap: int) -> list[str]:
+        clean = " ".join(text.split())
+        if not clean:
+            return []
+        if len(clean) <= chunk_size:
+            return [clean]
+
+        result: list[str] = []
+        start = 0
+        step = max(1, chunk_size - overlap)
+        while start < len(clean):
+            end = min(len(clean), start + chunk_size)
+            result.append(clean[start:end])
+            if end >= len(clean):
+                break
+            start += step
+        return result
+
     async def _chunking(self, job_id: str, text: str) -> list[dict[str, Any]]:
         async with self._lock:
             job = self._jobs[job_id]
+            doc = self._documents.get(job.document_id)
+            if not doc:
+                raise AppError("RESOURCE_NOT_FOUND", "Document not found", status_code=404)
             job.stage = JobStage.chunking
             job.progress = 45
             job.message = "Chunking document"
             job.updated_at = self._now()
+            strategy = doc.chunk_strategy
 
-        lines = [line.strip() for line in text.splitlines() if line.strip()]
-        if not lines:
-            lines = [text]
+        chunk_size, overlap = self._chunk_params(strategy)
+        segments = self._split_with_overlap(text, chunk_size, overlap)
+        if not segments:
+            segments = [text]
 
         chunks = []
-        for idx, line in enumerate(lines):
+        for idx, line in enumerate(segments):
             keywords = [word for word in line.split(" ") if word][:5]
             chunks.append(
                 {
@@ -362,7 +479,7 @@ class DocumentService:
                     "content": line,
                     "keywords": keywords,
                     "generated_questions": [f"What is the key point of chunk {idx}?"],
-                    "metadata": {"length": len(line)},
+                    "metadata": {"length": len(line), "chunk_strategy": strategy},
                 }
             )
         return chunks
@@ -375,11 +492,23 @@ class DocumentService:
             job.message = "Embedding chunks"
             job.updated_at = self._now()
 
-        for chunk in chunks:
-            digest = hashlib.sha256(chunk["content"].encode("utf-8")).hexdigest()
-            if not digest:
-                raise AppError("DOC_EMBEDDING_ERROR", "Document embedding failed", status_code=500)
-            chunk["metadata"]["embedding_ref"] = digest[:16]
+        try:
+            for chunk in chunks:
+                digest = hashlib.sha256(chunk["content"].encode("utf-8")).hexdigest()
+                if not digest:
+                    raise AppError("DOC_EMBEDDING_ERROR", "Document embedding failed", status_code=500)
+                chunk["metadata"]["embedding_ref"] = digest[:16]
+            if self._vector_store is not None:
+                self._vector_store.upsert(chunks)
+        except AppError:
+            raise
+        except Exception as exc:
+            raise AppError(
+                "DOC_EMBEDDING_ERROR",
+                "Document embedding failed",
+                detail={"reason": str(exc)},
+                status_code=500,
+            ) from exc
 
     async def _indexing(self, job_id: str, chunks: list[dict[str, Any]]) -> None:
         async with self._lock:
@@ -389,6 +518,35 @@ class DocumentService:
             job.message = "Indexing chunks"
             job.updated_at = self._now()
             self._chunks[job.document_id] = chunks
+
+        try:
+            if self._bm25_store is not None:
+                self._bm25_store.upsert(chunks)
+        except Exception as exc:
+            raise AppError(
+                "RAG_UPSTREAM_ERROR",
+                "RAG upstream error",
+                detail={"reason": str(exc)},
+                status_code=500,
+            ) from exc
+
+        if self._index_sync_service is not None:
+            try:
+                await self._index_sync_service.replace_and_rebuild_document_chunks(
+                    document_id=job.document_id,
+                    chunks=chunks,
+                    version=1,
+                )
+            except Exception as exc:
+                log_event(
+                    logger,
+                    "WARN",
+                    "doc.pipeline.index_sync.degraded",
+                    job_id=job.job_id,
+                    document_id=job.document_id,
+                    error_code="RETRIEVAL_SYNC_DEGRADED",
+                    detail={"reason": str(exc)},
+                )
 
     async def _succeed(self, job_id: str, chunk_count: int) -> None:
         async with self._lock:

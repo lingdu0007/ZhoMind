@@ -150,3 +150,7 @@ Sample structure:
 - Ensure commands reference correct directories.
 - Confirm docs paths exist under repo and no placeholders remain.
 - Verify Nginx config handles `/api/` correctly; adjust prefix if backend expects `/`.
+
+  sudo rsync -a --delete ~/workspace/ZhoMind/frontend/dist/ /var/www/zhomind-frontend/
+  sudo nginx -t
+  sudo nginx -s reload

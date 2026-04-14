@@ -6,9 +6,10 @@
         <span class="role" :class="msg.role">{{ msg.role === 'user' ? '你' : '助手' }}</span>
         <span v-if="msg.isThinking" class="status-dot">思考中...</span>
         <span v-else-if="msg.streaming" class="status-dot">Streaming…</span>
-        <span v-else-if="msg.status" class="status-text">{{ msg.status }}</span>
+        <span v-else-if="msg.status" class="status-text" :class="statusClass(msg.status)">{{ msg.status }}</span>
       </header>
       <div class="content">{{ msg.content }}</div>
+      <div v-if="msg.rejected" class="reject-tip">拒答原因：知识片段不足，建议补充关键词或限定范围。</div>
 
       <div v-if="msg.rag_steps?.length" class="steps">
         <strong>检索步骤</strong>
@@ -40,6 +41,14 @@ const formatTrace = (trace) => {
   } catch {
     return String(trace);
   }
+};
+
+const statusClass = (status) => {
+  if (!status) return '';
+  if (status.includes('失败')) return 'status-error';
+  if (status.includes('拒答')) return 'status-reject';
+  if (status.includes('停止')) return 'status-stop';
+  return '';
 };
 
 const props = defineProps({
@@ -121,6 +130,28 @@ watch(
 .status-text {
   font-size: 12px;
   color: var(--cta);
+}
+
+.status-error {
+  color: var(--danger);
+}
+
+.status-reject {
+  color: #b45309;
+}
+
+.status-stop {
+  color: var(--text-muted);
+}
+
+.reject-tip {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #92400e;
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+  border-radius: 8px;
+  padding: 8px 10px;
 }
 
 .steps {

@@ -9,7 +9,12 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from src.infrastructure.db.models import DocumentJobModel, DocumentModel, MessageModel, SessionModel, UserModel
-from src.infrastructure.db.repositories import DocumentJobRepository, MessageRepository, SessionRepository
+from src.infrastructure.db.repositories import (
+    DocumentJobRepository,
+    MessageRepository,
+    RetrievalRepository,
+    SessionRepository,
+)
 
 
 def _upgrade_to_head(db_url: str) -> None:
@@ -33,11 +38,19 @@ def test_db_migration_and_repository_crud(tmp_path: Path) -> None:
             tables_result = await session.execute(
                 text(
                     "SELECT name FROM sqlite_master WHERE type='table' "
-                    "AND name IN ('users','sessions','messages','documents','document_jobs')"
+                    "AND name IN ('users','sessions','messages','documents','document_jobs','document_chunks','bm25_postings')"
                 )
             )
             tables = {name for (name,) in tables_result.all()}
-            assert tables == {"users", "sessions", "messages", "documents", "document_jobs"}
+            assert tables == {
+                "users",
+                "sessions",
+                "messages",
+                "documents",
+                "document_jobs",
+                "document_chunks",
+                "bm25_postings",
+            }
 
             user = UserModel(username="u1", password_hash="hash", role="user")
             session.add(user)
@@ -176,6 +189,78 @@ def test_job_enum_drift_protection_by_db_constraints(tmp_path: Path) -> None:
                 await session.rollback()
 
             assert failed is True
+
+        await engine.dispose()
+
+    import asyncio
+
+    asyncio.run(_run())
+
+
+def test_retrieval_repository_persistence_and_sync(tmp_path: Path) -> None:
+    db_path = tmp_path / "retrieval.sqlite3"
+    db_url = f"sqlite+aiosqlite:///{db_path}"
+    _upgrade_to_head(db_url)
+
+    async def _run() -> None:
+        engine = create_async_engine(db_url)
+        session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+
+        async with session_factory() as session:
+            session.add(UserModel(username="u3", password_hash="hash", role="user"))
+            session.add(
+                DocumentModel(
+                    document_id="doc_003",
+                    filename="retrieval.txt",
+                    file_type="text/plain",
+                    file_size=42,
+                    status="processing",
+                    chunk_strategy="general",
+                )
+            )
+            await session.commit()
+
+            repo = RetrievalRepository(session)
+            chunk_ids = await repo.replace_document_chunks(
+                document_id="doc_003",
+                version=2,
+                chunks=[
+                    {
+                        "chunk_index": 0,
+                        "content": "alpha beta",
+                        "keywords": ["alpha"],
+                        "generated_questions": ["what is alpha"],
+                        "metadata": {"source": "unit"},
+                    },
+                    {
+                        "chunk_index": 1,
+                        "content": "beta gamma",
+                        "keywords": ["beta"],
+                        "generated_questions": ["what is beta"],
+                        "metadata": {"source": "unit"},
+                    },
+                ],
+            )
+            assert len(chunk_ids) == 2
+
+            listed = await repo.list_chunks_for_index(document_id="doc_003", version=2)
+            assert len(listed) == 2
+            assert listed[0]["chunk_index"] == 0
+            assert listed[1]["chunk_index"] == 1
+
+            marked = await repo.mark_chunks_index_status(chunk_ids, index_status="indexed", indexed_at=datetime.now(UTC))
+            assert marked == 2
+            await session.commit()
+
+            posting_count = await session.scalar(
+                text("SELECT count(*) FROM bm25_postings WHERE document_id = 'doc_003' AND version = 2")
+            )
+            assert int(posting_count or 0) > 0
+
+            cleanup = await repo.delete_document_retrieval_data(document_id="doc_003")
+            assert cleanup["chunks_deleted"] == 2
+            assert cleanup["bm25_deleted"] > 0
+            await session.commit()
 
         await engine.dispose()
 

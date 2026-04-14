@@ -3,7 +3,7 @@
     <div class="top-bar">
       <div>
         <h1>Chat · Knowledge Pulse</h1>
-        <p class="subtitle" v-if="chatStore.loading">Streaming…</p>
+        <p class="subtitle" v-if="streamSubtitle">{{ streamSubtitle }}</p>
       </div>
       <div class="top-actions">
         <el-button class="btn-ghost" @click="startNewSession">新建会话</el-button>
@@ -78,7 +78,7 @@
 </template>
 
 <script setup>
-import { nextTick, onMounted, reactive, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import ChatMessageList from '../components/ChatMessageList.vue';
 import SessionDrawer from '../components/SessionDrawer.vue';
@@ -98,6 +98,14 @@ const authForm = reactive({
   password: '',
   role: 'user',
   admin_code: ''
+});
+
+const streamSubtitle = computed(() => {
+  if (chatStore.loading) return '流式生成中…';
+  const assistantMessages = chatStore.messages.filter((item) => item.role === 'assistant');
+  const lastAssistant = assistantMessages[assistantMessages.length - 1];
+  if (!lastAssistant) return '';
+  return lastAssistant.status || '';
 });
 
 const scrollToBottom = async () => {

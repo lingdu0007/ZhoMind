@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia';
 import { apiAdapter, streamChat } from '../api/adapters';
+import { extractRejectReason, formatStreamError, getDoneStatus } from './chat-state';
 
 const toText = (value) => {
   if (typeof value === 'string') return value;
@@ -46,6 +47,8 @@ export const useChatStore = defineStore('chat', {
         rag_steps: [],
         streaming: false,
         isThinking: false,
+        rejected: false,
+        reject_reason: '',
         status: ''
       }));
     },
@@ -78,6 +81,8 @@ export const useChatStore = defineStore('chat', {
         rag_steps: [],
         streaming: true,
         isThinking: true,
+        rejected: false,
+        reject_reason: '',
         status: '思考中...'
       });
 
@@ -107,6 +112,12 @@ export const useChatStore = defineStore('chat', {
               const assistantMsg = getAssistantMsg();
               if (!assistantMsg) return;
               assistantMsg.rag_steps.push(toText(step));
+              const rejectReason = extractRejectReason(step);
+              if (rejectReason) {
+                assistantMsg.rejected = true;
+                assistantMsg.reject_reason = rejectReason;
+                assistantMsg.status = '证据不足，进入拒答';
+              }
               this.streamTick += 1;
             },
             onTrace: (trace) => {
@@ -121,7 +132,7 @@ export const useChatStore = defineStore('chat', {
               assistantMsg.isThinking = false;
               assistantMsg.status = '生成失败';
               if (!assistantMsg.content) {
-                assistantMsg.content = `请求失败：${toText(err)}`;
+                assistantMsg.content = `请求失败：${formatStreamError(err)}`;
               }
               this.streamTick += 1;
             },
@@ -130,7 +141,10 @@ export const useChatStore = defineStore('chat', {
               if (!assistantMsg) return;
               assistantMsg.streaming = false;
               assistantMsg.isThinking = false;
-              assistantMsg.status = '';
+              if (assistantMsg.rejected && !assistantMsg.content) {
+                assistantMsg.content = '未检索到足够相关的知识片段，请补充更具体的问题或关键词。';
+              }
+              assistantMsg.status = getDoneStatus(assistantMsg);
               this.streamTick += 1;
             }
           }
@@ -148,7 +162,7 @@ export const useChatStore = defineStore('chat', {
         } else {
           assistantMsg.status = '生成失败';
           if (!assistantMsg.content) {
-            assistantMsg.content = `请求失败：${error.message}`;
+            assistantMsg.content = `请求失败：${formatStreamError(error)}`;
           }
         }
         this.streamTick += 1;

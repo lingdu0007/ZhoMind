@@ -1,0 +1,40 @@
+{"qid":"Q001","query":"如何上传文档并异步构建索引？","intent":"positive","must_include_docs":["doc_documents_upload"],"must_exclude_docs":[],"notes":"命中 documents upload + 202 accepted"}
+{"qid":"Q002","query":"文档构建任务有哪些状态？","intent":"positive","must_include_docs":["doc_document_jobs_status"],"must_exclude_docs":[],"notes":"关注 queued/running/succeeded/failed/canceled"}
+{"qid":"Q003","query":"怎么查询单个 job 的进度？","intent":"positive","must_include_docs":["doc_document_jobs_get"],"must_exclude_docs":[],"notes":"GET /documents/jobs/{job_id}"}
+{"qid":"Q004","query":"如何取消正在运行的文档任务？","intent":"positive","must_include_docs":["doc_document_jobs_cancel"],"must_exclude_docs":[],"notes":"POST cancel + 202"}
+{"qid":"Q005","query":"chunks 结果未就绪时应该返回什么错误？","intent":"positive","must_include_docs":["doc_documents_chunks"],"must_exclude_docs":[],"notes":"DOC_CHUNK_RESULT_NOT_READY / 409"}
+{"qid":"Q006","query":"batch-build 的返回结构是什么？","intent":"positive","must_include_docs":["doc_documents_batch_build"],"must_exclude_docs":[],"notes":"items[{document_id,job_id,status}]"}
+{"qid":"Q007","query":"batch-delete 如何返回部分失败信息？","intent":"positive","must_include_docs":["doc_documents_batch_delete"],"must_exclude_docs":[],"notes":"success_ids + failed_items"}
+{"qid":"Q008","query":"文档 ready 后如何查询分块内容？","intent":"positive","must_include_docs":["doc_documents_chunks"],"must_exclude_docs":[],"notes":"GET /documents/{document_id}/chunks"}
+{"qid":"Q009","query":"chat stream 的事件顺序是什么？","intent":"positive","must_include_docs":["doc_chat_stream_sse"],"must_exclude_docs":[],"notes":"meta/content/rag_step/trace/done"}
+{"qid":"Q010","query":"auth 登录成功后返回哪些 token 字段？","intent":"positive","must_include_docs":["doc_auth_login"],"must_exclude_docs":[],"notes":"AuthTokens fields"}
+{"qid":"Q011","query":"sessions 列表分页字段是什么？","intent":"positive","must_include_docs":["doc_sessions_list"],"must_exclude_docs":[],"notes":"items + pagination"}
+{"qid":"Q012","query":"删除 session 的状态码应该是什么？","intent":"positive","must_include_docs":["doc_sessions_delete"],"must_exclude_docs":[],"notes":"204 or 404"}
+{"qid":"Q013","query":"documents 列表支持哪些筛选参数？","intent":"positive","must_include_docs":["doc_documents_list"],"must_exclude_docs":[],"notes":"page/page_size/keyword/sort/status"}
+{"qid":"Q014","query":"upload 接口为什么返回 202？","intent":"positive","must_include_docs":["doc_documents_upload"],"must_exclude_docs":[],"notes":"异步受理语义"}
+{"qid":"Q015","query":"job stream 的 progress 事件最少包含哪些字段？","intent":"positive","must_include_docs":["doc_document_jobs_stream"],"must_exclude_docs":[],"notes":"job_id/status/stage/progress"}
+{"qid":"Q016","query":"document status 和 job status 的关系是什么？","intent":"positive","must_include_docs":["doc_pipeline_semantics"],"must_exclude_docs":[],"notes":"ready/succeeded 一致性"}
+{"qid":"Q017","query":"chunk_strategy 支持哪些枚举值？","intent":"positive","must_include_docs":["doc_chunk_strategy_enum"],"must_exclude_docs":[],"notes":"padding/general/book/paper/resume/table/qa"}
+{"qid":"Q018","query":"任务失败时 error_code 在哪里返回？","intent":"positive","must_include_docs":["doc_document_jobs_get"],"must_exclude_docs":[],"notes":"DocumentBuildJob.error_code"}
+{"qid":"Q019","query":"SSE 的 done 事件何时触发？","intent":"positive","must_include_docs":["doc_sse_protocol"],"must_exclude_docs":[],"notes":"结束必须且仅一次"}
+{"qid":"Q020","query":"非 admin 调 documents 接口会返回什么？","intent":"positive","must_include_docs":["doc_documents_authz"],"must_exclude_docs":[],"notes":"403 AUTH_FORBIDDEN"}
+{"qid":"Q021","query":"今天天气怎么样","intent":"noise","must_include_docs":[],"must_exclude_docs":["doc_documents_upload","doc_chat_stream_sse"],"notes":"通用闲聊噪声"}
+{"qid":"Q022","query":"推荐一部科幻电影","intent":"noise","must_include_docs":[],"must_exclude_docs":["doc_auth_login","doc_sessions_list"],"notes":"开放域噪声"}
+{"qid":"Q023","query":"你好你好测试测试","intent":"noise","must_include_docs":[],"must_exclude_docs":["doc_documents_list"],"notes":"重复无信息"}
+{"qid":"Q024","query":"asdf qwer zxcv","intent":"noise","must_include_docs":[],"must_exclude_docs":["doc_document_jobs_status"],"notes":"随机字符串"}
+{"qid":"Q025","query":"股票代码 600519 走势","intent":"noise","must_include_docs":[],"must_exclude_docs":["doc_documents_batch_build"],"notes":"领域无关"}
+{"qid":"Q026","query":"红烧肉怎么做","intent":"noise","must_include_docs":[],"must_exclude_docs":["doc_documents_batch_delete"],"notes":"菜谱噪声"}
+{"qid":"Q027","query":"Python 装饰器基础教程","intent":"noise","must_include_docs":[],"must_exclude_docs":["doc_auth_register"],"notes":"若语料未覆盖则应低命中"}
+{"qid":"Q028","query":"世界杯历届冠军","intent":"noise","must_include_docs":[],"must_exclude_docs":["doc_sessions_delete"],"notes":"体育噪声"}
+{"qid":"Q029","query":"日本旅行七天攻略","intent":"noise","must_include_docs":[],"must_exclude_docs":["doc_documents_chunks"],"notes":"旅游噪声"}
+{"qid":"Q030","query":"减脂饮食计划","intent":"noise","must_include_docs":[],"must_exclude_docs":["doc_document_jobs_stream"],"notes":"健康噪声"}
+{"qid":"Q031","query":"### !!! ???","intent":"noise","must_include_docs":[],"must_exclude_docs":["doc_sse_protocol"],"notes":"符号噪声"}
+{"qid":"Q032","query":"lorem ipsum dolor sit amet","intent":"noise","must_include_docs":[],"must_exclude_docs":["doc_pipeline_semantics"],"notes":"占位文本噪声"}
+{"qid":"Q033","query":"1234567890","intent":"noise","must_include_docs":[],"must_exclude_docs":["doc_chunk_strategy_enum"],"notes":"数字噪声"}
+{"qid":"Q034","query":"哈哈哈哈哈哈哈哈","intent":"noise","must_include_docs":[],"must_exclude_docs":["doc_documents_authz"],"notes":"重复中文噪声"}
+{"qid":"Q035","query":"a b c d e","intent":"noise","must_include_docs":[],"must_exclude_docs":["doc_documents_upload"],"notes":"单字母低信息"}
+{"qid":"Q036","query":"apple engine river cloud","intent":"noise","must_include_docs":[],"must_exclude_docs":["doc_auth_login"],"notes":"英文随机词"}
+{"qid":"Q037","query":"' OR 1=1 --","intent":"noise","must_include_docs":[],"must_exclude_docs":["doc_sessions_list"],"notes":"注入样式噪声"}
+{"qid":"Q038","query":"这是一段非常长但无实际业务语义的查询文本用于测试检索系统在噪声输入情况下的鲁棒性请忽略其中所有内容并不要返回任何与文档构建或会话管理相关结果","intent":"noise","must_include_docs":[],"must_exclude_docs":["doc_documents_list","doc_document_jobs_get"],"notes":"长噪声句"}
+{"qid":"Q039","query":"😀😀😀😀😀","intent":"noise","must_include_docs":[],"must_exclude_docs":["doc_documents_batch_delete"],"notes":"emoji 噪声"}
+{"qid":"Q040","query":"天气 股票 菜谱 一起查","intent":"noise","must_include_docs":[],"must_exclude_docs":["doc_chat_stream_sse","doc_documents_chunks"],"notes":"混合主题噪声"}

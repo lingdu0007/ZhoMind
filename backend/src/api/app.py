@@ -5,10 +5,14 @@ from fastapi import FastAPI
 from src.api.errors import register_exception_handlers
 from src.api.router import api_router
 from src.application.document_service import DocumentService, DocumentTaskExecutor
+from src.application.rag_service import RagService
 from src.infrastructure.config.settings import get_settings
 from src.infrastructure.db.connection import create_database
 from src.infrastructure.logging.logger import setup_logging
 from src.infrastructure.queue.runner import QueueRunner
+from src.infrastructure.retrieval.bm25_store import Bm25Store
+from src.infrastructure.retrieval.index_sync import RetrievalIndexSyncService
+from src.infrastructure.retrieval.vector_store import MilvusVectorStore
 from src.shared.middleware import RequestIdMiddleware
 
 
@@ -16,19 +20,46 @@ from src.shared.middleware import RequestIdMiddleware
 async def lifespan(app: FastAPI):
     settings = get_settings()
 
-    setup_logging(settings.log_level)
+    setup_logging(level=settings.log_level, service=settings.app_name, env=settings.env)
 
     db = create_database(settings.database_url)
     await db.connect()
 
     queue_runner = QueueRunner(settings.queue_backend, executor=DocumentTaskExecutor(service=None))
-    document_service = DocumentService(queue_runner=queue_runner)
+    vector_store = MilvusVectorStore(
+        host=settings.milvus_host,
+        port=settings.milvus_port,
+        collection_name=settings.milvus_collection_name,
+    )
+    bm25_store = Bm25Store()
+    index_sync_service = RetrievalIndexSyncService(
+        session_factory=db.session_factory,
+        vector_store=vector_store,
+        bm25_store=bm25_store,
+    )
+    document_service = DocumentService(
+        queue_runner=queue_runner,
+        vector_store=vector_store,
+        bm25_store=bm25_store,
+        index_sync_service=index_sync_service,
+    )
     queue_runner.executor = DocumentTaskExecutor(service=document_service)
     await queue_runner.start()
 
     app.state.db = db
     app.state.queue_runner = queue_runner
     app.state.document_service = document_service
+    app.state.rag_service = RagService(
+        document_service=document_service,
+        min_score=settings.rag_min_score,
+        min_hits=settings.rag_min_hits,
+        max_context_chunks=settings.rag_max_context_chunks,
+        score_low=settings.rag_score_low,
+        score_high=settings.rag_score_high,
+        retrieval_top_k=settings.rag_retrieval_top_k,
+        bm25_min_term_match=settings.rag_bm25_min_term_match,
+        bm25_min_score=settings.rag_bm25_min_score,
+    )
 
     yield
 

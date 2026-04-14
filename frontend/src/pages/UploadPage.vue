@@ -23,51 +23,53 @@
           <el-button class="btn-ghost" @click="loadJobs">刷新任务</el-button>
         </div>
 
-        <el-table class="table-minimal" :data="jobs" empty-text="暂无任务" style="margin: 0 24px 24px">
-          <el-table-column prop="job_id" label="任务ID" min-width="220" />
-          <el-table-column prop="document_id" label="文档ID" min-width="220" />
-          <el-table-column label="状态" width="120">
-            <template #default="scope">
-              <el-tag size="small" :type="jobStatusMeta(scope.row.status).type">
-                {{ jobStatusMeta(scope.row.status).label }}
-              </el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column label="阶段" width="140">
-            <template #default="scope">
-              {{ jobStageLabel(scope.row.stage) }}
-            </template>
-          </el-table-column>
-          <el-table-column label="进度" width="180">
-            <template #default="scope">
-              <el-progress :percentage="Number(scope.row.progress || 0)" :stroke-width="10" />
-            </template>
-          </el-table-column>
-          <el-table-column label="信息" min-width="180">
-            <template #default="scope">
-              {{ scope.row.message || '-' }}
-            </template>
-          </el-table-column>
-          <el-table-column label="更新时间" width="200">
-            <template #default="scope">
-              {{ formatTime(scope.row.updated_at) }}
-            </template>
-          </el-table-column>
-          <el-table-column label="操作" width="120">
-            <template #default="scope">
-              <el-button
-                v-if="canCancelJob(scope.row)"
-                link
-                type="warning"
-                :loading="Boolean(jobCancelLoadingMap[scope.row.job_id])"
-                @click="cancelJob(scope.row)"
-              >
-                取消任务
-              </el-button>
-              <span v-else>-</span>
-            </template>
-          </el-table-column>
-        </el-table>
+        <div class="job-table-wrap">
+          <el-table class="table-minimal" :data="jobs" empty-text="暂无任务">
+            <el-table-column prop="job_id" label="任务ID" min-width="220" show-overflow-tooltip />
+            <el-table-column prop="document_id" label="文档ID" min-width="220" show-overflow-tooltip />
+            <el-table-column label="状态" width="120">
+              <template #default="scope">
+                <el-tag size="small" :type="jobStatusMeta(scope.row.status).type">
+                  {{ jobStatusMeta(scope.row.status).label }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="阶段" width="140">
+              <template #default="scope">
+                {{ jobStageLabel(scope.row.stage) }}
+              </template>
+            </el-table-column>
+            <el-table-column label="进度" width="180">
+              <template #default="scope">
+                <el-progress :percentage="Number(scope.row.progress || 0)" :stroke-width="10" />
+              </template>
+            </el-table-column>
+            <el-table-column label="信息" min-width="180" show-overflow-tooltip>
+              <template #default="scope">
+                {{ scope.row.message || '-' }}
+              </template>
+            </el-table-column>
+            <el-table-column label="更新时间" width="200" show-overflow-tooltip>
+              <template #default="scope">
+                {{ formatTime(scope.row.updated_at) }}
+              </template>
+            </el-table-column>
+            <el-table-column label="操作" width="120">
+              <template #default="scope">
+                <el-button
+                  v-if="canCancelJob(scope.row)"
+                  link
+                  type="warning"
+                  :loading="Boolean(jobCancelLoadingMap[scope.row.job_id])"
+                  @click="cancelJob(scope.row)"
+                >
+                  取消任务
+                </el-button>
+                <span v-else>-</span>
+              </template>
+            </el-table-column>
+          </el-table>
+        </div>
       </div>
 
       <div class="card table-card">
@@ -736,6 +738,16 @@ onBeforeUnmount(() => {
 
 .table-card {
   margin-top: 16px;
+}
+
+.job-table-wrap {
+  width: 100%;
+  padding: 0 24px 24px;
+  overflow-x: auto;
+}
+
+.job-table-wrap :deep(.el-table) {
+  width: 100%;
 }
 
 .table-header {

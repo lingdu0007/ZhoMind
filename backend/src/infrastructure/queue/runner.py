@@ -2,6 +2,8 @@ import asyncio
 import logging
 from dataclasses import dataclass
 
+from src.infrastructure.logging.observability import log_event
+
 logger = logging.getLogger(__name__)
 
 
@@ -38,6 +40,15 @@ class QueueRunner:
 
     async def enqueue(self, task_name: str, payload: dict) -> None:
         await self._queue.put(QueueTask(task_name=task_name, payload=payload))
+        log_event(
+            logger,
+            "INFO",
+            "queue.task.enqueued",
+            task_name=task_name,
+            job_id=payload.get("job_id"),
+            document_id=payload.get("document_id"),
+            request_id=payload.get("request_id"),
+        )
 
     async def _run(self) -> None:
         while not self._stopping:
@@ -45,8 +56,32 @@ class QueueRunner:
             try:
                 if task.task_name == "__stop__":
                     return
+                log_event(
+                    logger,
+                    "INFO",
+                    "queue.task.started",
+                    task_name=task.task_name,
+                    job_id=task.payload.get("job_id"),
+                    request_id=task.payload.get("request_id"),
+                )
                 await self.executor.execute(task.task_name, task.payload)
+                log_event(
+                    logger,
+                    "INFO",
+                    "queue.task.completed",
+                    task_name=task.task_name,
+                    job_id=task.payload.get("job_id"),
+                    request_id=task.payload.get("request_id"),
+                )
             except Exception:
-                logger.exception("queue_task_failed")
+                logger.exception(
+                    "queue.task.failed",
+                    extra={
+                        "task_name": task.task_name,
+                        "job_id": task.payload.get("job_id"),
+                        "request_id": task.payload.get("request_id"),
+                        "error_code": "INTERNAL_ERROR",
+                    },
+                )
             finally:
                 self._queue.task_done()

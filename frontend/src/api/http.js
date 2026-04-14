@@ -1,7 +1,25 @@
 import axios from 'axios';
 
-const fallbackBaseURL = `${window.location.protocol}//${window.location.hostname}:8000`;
-const baseURL = import.meta.env.VITE_API_BASE_URL || fallbackBaseURL;
+const DIRECT_BACKEND_BASE_URL = 'http://127.0.0.1:8000/api/v1';
+
+const trimTrailingSlash = (value) => value.replace(/\/+$/, '');
+
+export const resolveApiBaseURL = () => {
+  const envBase = import.meta.env.VITE_API_BASE_URL;
+  if (envBase && envBase.trim()) {
+    return trimTrailingSlash(envBase.trim());
+  }
+
+  // Nginx 同源语义：页面由 8001 提供时统一走 /api，再由 Nginx 转 /api/v1。
+  if (window.location.port === '8001') {
+    return '/api';
+  }
+
+  // 直连后端语义：显式带 /api/v1。
+  return DIRECT_BACKEND_BASE_URL;
+};
+
+const baseURL = resolveApiBaseURL();
 
 const http = axios.create({
   baseURL,
