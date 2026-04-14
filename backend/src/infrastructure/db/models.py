@@ -1,119 +1,77 @@
+from __future__ import annotations
+
 from datetime import datetime
 
-from sqlalchemy import BIGINT, CheckConstraint, DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.dialects.sqlite import JSON
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column
 
-
-class Base(DeclarativeBase):
-    pass
+from src.infrastructure.db.connection import Base
 
 
 class UserModel(Base):
     __tablename__ = "users"
 
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    username: Mapped[str] = mapped_column(String(64), unique=True, index=True)
-    password_hash: Mapped[str] = mapped_column(String(255))
-    role: Mapped[str] = mapped_column(String(16), default="user")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    username: Mapped[str] = mapped_column(String(64), nullable=False, unique=True, index=True)
+    password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    role: Mapped[str] = mapped_column(String(16), nullable=False, default="user")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+        DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
     )
 
     __table_args__ = (CheckConstraint("role IN ('admin','user')", name="ck_users_role"),)
 
 
-class SessionModel(Base):
-    __tablename__ = "sessions"
+class ChatSessionModel(Base):
+    __tablename__ = "chat_sessions"
 
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    session_id: Mapped[str] = mapped_column(String(64), unique=True, index=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     title: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
-    message_count: Mapped[int] = mapped_column(Integer, default=0)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-
-    __table_args__ = (CheckConstraint("message_count >= 0", name="ck_sessions_message_count"),)
-
-
-class MessageModel(Base):
-    __tablename__ = "messages"
-
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    message_id: Mapped[str] = mapped_column(String(64), unique=True, index=True)
-    session_id: Mapped[str] = mapped_column(
-        ForeignKey("sessions.session_id", ondelete="CASCADE"), index=True
+    message_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now(), index=True
     )
-    role: Mapped[str] = mapped_column(String(16))
-    content: Mapped[str] = mapped_column(Text)
-    timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
-    rag_trace: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
-    __table_args__ = (CheckConstraint("role IN ('user','assistant')", name="ck_messages_role"),)
+    __table_args__ = (CheckConstraint("message_count >= 0", name="ck_chat_sessions_message_count"),)
+
+
+class ChatMessageModel(Base):
+    __tablename__ = "chat_messages"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    session_id: Mapped[str] = mapped_column(
+        ForeignKey("chat_sessions.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    role: Mapped[str] = mapped_column(String(16), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    rag_trace_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now(), index=True)
+
+    __table_args__ = (CheckConstraint("role IN ('user','assistant')", name="ck_chat_messages_role"),)
 
 
 class DocumentModel(Base):
     __tablename__ = "documents"
 
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    document_id: Mapped[str] = mapped_column(String(64), unique=True, index=True)
-    filename: Mapped[str] = mapped_column(String(512), index=True)
-    file_type: Mapped[str] = mapped_column(String(128))
-    file_size: Mapped[int] = mapped_column(BIGINT)
-    status: Mapped[str] = mapped_column(String(16), default="pending", index=True)
-    chunk_strategy: Mapped[str] = mapped_column(String(16), default="general")
-    chunk_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    uploaded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
-    ready_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    filename: Mapped[str] = mapped_column(String(512), nullable=False, unique=True, index=True)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="uploaded", index=True)
+    chunk_strategy: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    chunk_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+        DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now(), index=True
     )
 
     __table_args__ = (
-        CheckConstraint("file_size >= 0", name="ck_documents_file_size"),
-        CheckConstraint("chunk_count IS NULL OR chunk_count >= 0", name="ck_documents_chunk_count"),
+        CheckConstraint("chunk_count >= 0", name="ck_documents_chunk_count"),
         CheckConstraint(
-            "status IN ('pending','processing','ready','failed','deleting')",
+            "status IN ('uploaded','queued','building','ready','failed','deleting','deleted')",
             name="ck_documents_status",
-        ),
-        CheckConstraint(
-            "chunk_strategy IN ('padding','general','book','paper','resume','table','qa')",
-            name="ck_documents_chunk_strategy",
-        ),
-    )
-
-
-class DocumentJobModel(Base):
-    __tablename__ = "document_jobs"
-
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    job_id: Mapped[str] = mapped_column(String(64), unique=True, index=True)
-    document_id: Mapped[str] = mapped_column(
-        ForeignKey("documents.document_id", ondelete="CASCADE"), index=True
-    )
-    status: Mapped[str] = mapped_column(String(16), default="queued", index=True)
-    stage: Mapped[str] = mapped_column(String(16), default="uploaded")
-    progress: Mapped[int] = mapped_column(Integer, default=0)
-    message: Mapped[str | None] = mapped_column(Text, nullable=True)
-    error_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), index=True
-    )
-    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-
-    __table_args__ = (
-        CheckConstraint("progress >= 0 AND progress <= 100", name="ck_document_jobs_progress"),
-        CheckConstraint(
-            "status IN ('queued','running','succeeded','failed','canceled')",
-            name="ck_document_jobs_status",
-        ),
-        CheckConstraint(
-            "stage IN ('uploaded','parsing','chunking','embedding','indexing','completed','failed')",
-            name="ck_document_jobs_stage",
         ),
     )
 
@@ -121,52 +79,38 @@ class DocumentJobModel(Base):
 class DocumentChunkModel(Base):
     __tablename__ = "document_chunks"
 
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    chunk_id: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
     document_id: Mapped[str] = mapped_column(
-        ForeignKey("documents.document_id", ondelete="CASCADE"), index=True
+        ForeignKey("documents.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    chunk_index: Mapped[int] = mapped_column(Integer)
-    content: Mapped[str] = mapped_column(Text)
-    keywords: Mapped[list[str]] = mapped_column(JSON, default=list)
-    generated_questions: Mapped[list[str]] = mapped_column(JSON, default=list)
-    chunk_metadata: Mapped[dict | None] = mapped_column("metadata", JSON, nullable=True)
-    retrieval_text: Mapped[str] = mapped_column(Text)
-    tokens: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
-    version: Mapped[int] = mapped_column(Integer, default=1, index=True)
-    index_status: Mapped[str] = mapped_column(String(16), default="pending", index=True)
-    indexed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    chunk_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    chunk_metadata_json: Mapped[dict | None] = mapped_column("metadata_json", JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+    __table_args__ = (CheckConstraint("chunk_index >= 0", name="ck_document_chunks_chunk_index"),)
+
+
+class IngestionJobModel(Base):
+    __tablename__ = "ingestion_jobs"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    document_id: Mapped[str] = mapped_column(
+        ForeignKey("documents.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="queued", index=True)
+    stage: Mapped[str] = mapped_column(String(32), nullable=False, default="uploaded")
+    progress: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+        DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now(), index=True
     )
 
     __table_args__ = (
-        CheckConstraint("chunk_index >= 0", name="ck_document_chunks_chunk_index"),
-        CheckConstraint("version >= 1", name="ck_document_chunks_version"),
+        CheckConstraint("progress >= 0 AND progress <= 100", name="ck_ingestion_jobs_progress"),
         CheckConstraint(
-            "index_status IN ('pending','indexing','indexed','failed')",
-            name="ck_document_chunks_index_status",
+            "status IN ('queued','running','succeeded','failed','canceled')",
+            name="ck_ingestion_jobs_status",
         ),
-    )
-
-
-class Bm25PostingModel(Base):
-    __tablename__ = "bm25_postings"
-
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    chunk_id: Mapped[str] = mapped_column(
-        ForeignKey("document_chunks.chunk_id", ondelete="CASCADE"), index=True
-    )
-    document_id: Mapped[str] = mapped_column(String(64), index=True)
-    term: Mapped[str] = mapped_column(String(128), index=True)
-    tf: Mapped[int] = mapped_column(Integer)
-    doc_len: Mapped[int] = mapped_column(Integer)
-    version: Mapped[int] = mapped_column(Integer, default=1, index=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-
-    __table_args__ = (
-        CheckConstraint("tf >= 1", name="ck_bm25_postings_tf"),
-        CheckConstraint("doc_len >= 1", name="ck_bm25_postings_doc_len"),
-        CheckConstraint("version >= 1", name="ck_bm25_postings_version"),
     )

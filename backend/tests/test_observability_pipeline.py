@@ -3,8 +3,8 @@ import asyncio
 from fastapi.testclient import TestClient
 
 from src.application.document_service import DocumentService, DocumentTaskExecutor
-from src.main import app
 from src.infrastructure.logging.observability import bind_context
+from src.main import app
 from src.shared.request_context import request_id_ctx
 
 
@@ -16,21 +16,19 @@ class _QueueStub:
         self.items.append((task_name, payload))
 
 
-client = TestClient(app)
-
-
 def test_chat_stream_meta_uses_header_request_id() -> None:
     request_id = "req_obs_chat_stream_001"
-    with client.stream(
-        "POST",
-        "/api/v1/chat/stream",
-        headers={"x-request-id": request_id},
-        json={"message": "hello"},
-    ) as response:
-        assert response.status_code == 200
-        assert response.headers["x-request-id"] == request_id
-        body = "".join(response.iter_text())
-        assert f'"request_id": "{request_id}"' in body
+    with TestClient(app) as client:
+        with client.stream(
+            "POST",
+            "/api/v1/chat/stream",
+            headers={"x-request-id": request_id},
+            json={"message": "hello"},
+        ) as response:
+            assert response.status_code == 200
+            assert response.headers["x-request-id"] == request_id
+            body = "".join(response.iter_text())
+            assert f'"request_id": "{request_id}"' in body
 
 
 def test_document_upload_enqueues_request_id() -> None:

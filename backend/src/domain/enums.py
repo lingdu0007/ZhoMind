@@ -1,47 +1,34 @@
 from enum import Enum
 
 
-class UserRole(str, Enum):
-    admin = "admin"
-    user = "user"
-
-
-class MessageRole(str, Enum):
-    user = "user"
-    assistant = "assistant"
-
-
 class DocumentStatus(str, Enum):
-    pending = "pending"
-    processing = "processing"
-    ready = "ready"
-    failed = "failed"
-    deleting = "deleting"
+    UPLOADED = "uploaded"
+    QUEUED = "queued"
+    BUILDING = "building"
+    READY = "ready"
+    FAILED = "failed"
+    DELETING = "deleting"
+    DELETED = "deleted"
 
-
-class ChunkStrategy(str, Enum):
-    padding = "padding"
-    general = "general"
-    book = "book"
-    paper = "paper"
-    resume = "resume"
-    table = "table"
-    qa = "qa"
+    def can_transition_to(self, next_status: "DocumentStatus") -> bool:
+        allowed_transitions = {
+            DocumentStatus.UPLOADED: {DocumentStatus.QUEUED, DocumentStatus.DELETING, DocumentStatus.DELETED},
+            DocumentStatus.QUEUED: {DocumentStatus.BUILDING, DocumentStatus.FAILED, DocumentStatus.DELETING},
+            DocumentStatus.BUILDING: {DocumentStatus.READY, DocumentStatus.FAILED, DocumentStatus.DELETING},
+            DocumentStatus.READY: {DocumentStatus.QUEUED, DocumentStatus.DELETING, DocumentStatus.DELETED},
+            DocumentStatus.FAILED: {DocumentStatus.QUEUED, DocumentStatus.DELETING, DocumentStatus.DELETED},
+            DocumentStatus.DELETING: {DocumentStatus.DELETED, DocumentStatus.FAILED},
+            DocumentStatus.DELETED: set(),
+        }
+        return next_status in allowed_transitions[self]
 
 
 class JobStatus(str, Enum):
-    queued = "queued"
-    running = "running"
-    succeeded = "succeeded"
-    failed = "failed"
-    canceled = "canceled"
+    QUEUED = "queued"
+    RUNNING = "running"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+    CANCELED = "canceled"
 
-
-class JobStage(str, Enum):
-    uploaded = "uploaded"
-    parsing = "parsing"
-    chunking = "chunking"
-    embedding = "embedding"
-    indexing = "indexing"
-    completed = "completed"
-    failed = "failed"
+    def is_terminal(self) -> bool:
+        return self in {JobStatus.SUCCEEDED, JobStatus.FAILED, JobStatus.CANCELED}

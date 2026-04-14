@@ -5,7 +5,13 @@ import uuid
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 
-from src.infrastructure.logging.observability import level_from_status, log_event, redact_headers, reset_context, set_context
+from src.infrastructure.logging.observability import (
+    level_from_status,
+    log_event,
+    redact_headers,
+    reset_context,
+    set_context,
+)
 from src.shared.request_context import error_code_ctx
 
 logger = logging.getLogger(__name__)
